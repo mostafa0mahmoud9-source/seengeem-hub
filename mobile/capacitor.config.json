@@ -1,0 +1,6 @@
+{
+  "appId": "com.seengeem.assistant",
+  "appName": "مساعد سين جيم",
+  "webDir": "www",
+  "server": { "androidScheme": "https" }
+}
