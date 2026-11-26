@@ -2,13 +2,13 @@
 /**
  * Plugin Name: SeenGeem WhatsApp Bridge
  * Description: جسر واتساب لمساعد سين جيم: رقمان (طلاب وأولياء أمور / مدرسين ومتابعة)، Cloud API رسمي + بوابة QR احتياطية، طابور رسائل، تتبع التسليم، وواجهة API للتطبيقات.
- * Version: 2.5.0
+ * Version: 2.6.0
  * Author: SeenGeem
  * Text Domain: sgb
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('SGB_VER', '2.5.0');
+define('SGB_VER', '2.6.0');
 define('SGB_OPT', 'sgb_settings');
 
 /* ───────────── الإعدادات ───────────── */
@@ -398,16 +398,9 @@ function sgb_page() {
     $s = sgb_settings();
     $hook = esc_url(rest_url('sgb/v1/webhook'));
     echo '<div class="wrap" dir="rtl"><h1>ربط واتساب — مساعد سين جيم</h1>';
-    $gw = get_option('sgb_gw', array());
-    $lbl = array('students' => 'رقم الطلاب وأولياء الأمور', 'staff' => 'رقم المدرسين والمتابعة');
-    echo '<div class="notice notice-info" style="padding:12px 16px"><p><b>ربط الواتساب بالـ QR بيتم من «برنامج مساعد سين جيم» على الكمبيوتر</b> (مش من هنا): افتح البرنامج ← الصفحة الرئيسية ← أرقام الواتساب ← امسح الكود بواتساب كل رقم.</p><ul style="margin:6px 18px">';
-    foreach ($lbl as $k => $name) {
-        $g = isset($gw[$k]) ? $gw[$k] : array();
-        $ok = !empty($g['state']) && $g['state'] === 'ready' && !empty($g['ts']) && (time() - (int) $g['ts']) < 240;
-        echo '<li>' . esc_html($name) . ': ' . ($ok ? '<b style="color:#0a7d33">متصل ✔</b>' . (!empty($g['phone']) ? ' (' . esc_html($g['phone']) . ')' : '') : '<b style="color:#b32d2e">غير مربوط</b>') . '</li>';
-    }
-    echo '</ul><p><a class="button button-primary" href="https://github.com/mostafa0mahmoud9-source/seengeem-hub/releases/latest" target="_blank" rel="noopener">تحميل البرنامج والتطبيق</a></p></div>';
+    sgb_qr_widget();
     if ($msg) { echo '<div class="notice notice-success"><p>' . esc_html($msg) . '</p></div>'; }
+    echo '<details style="margin-top:14px"><summary style="cursor:pointer;font-weight:600">⚙️ إعدادات متقدمة: Meta Cloud API الرسمي، ساعات الهدوء والحد اليومي (اختياري)</summary>';
     echo '<form method="post">'; wp_nonce_field('sgb_save');
     foreach ($s['channels'] as $k => $c) {
         echo '<h2>' . esc_html($c['label']) . '</h2><table class="form-table">';
@@ -421,7 +414,7 @@ function sgb_page() {
     echo '<tr><th>App Secret (للتحقق من الويب هوك)</th><td><input class="regular-text" type="password" name="app_secret" autocomplete="off" placeholder="' . ($s['app_secret'] ? '•••• محفوظ' : '') . '"></td></tr>';
     echo '<tr><th>ساعات الهدوء</th><td>من <input type="number" min="0" max="23" name="quiet_start" value="' . (int) $s['quiet_start'] . '" style="width:70px"> إلى <input type="number" min="0" max="23" name="quiet_end" value="' . (int) $s['quiet_end'] . '" style="width:70px"> (لا يُرسل غير العاجل)</td></tr>';
     echo '<tr><th>الحد اليومي لكل رقم</th><td><input type="number" name="daily_cap" value="' . (int) $s['daily_cap'] . '"></td></tr></table>';
-    echo '<p><button class="button button-primary" name="sgb_save" value="1">حفظ</button></p></form>';
+    echo '<p><button class="button button-primary" name="sgb_save" value="1">حفظ</button></p></form></details>';
     echo '<hr><h2>بيانات الربط</h2><table class="form-table">';
     echo '<tr><th>Webhook URL (في Meta)</th><td><code>' . $hook . '</code></td></tr>';
     echo '<tr><th>Verify Token</th><td><code>' . esc_html($s['verify_token']) . '</code></td></tr>';
@@ -432,3 +425,4 @@ require_once __DIR__ . '/includes/import.php';
 require_once __DIR__ . '/includes/extras.php';
 require_once __DIR__ . '/includes/messages.php';
 require_once __DIR__ . '/includes/teachers.php';
+require_once __DIR__ . '/includes/qrlink.php';
