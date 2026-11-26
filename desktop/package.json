@@ -1,24 +1,53 @@
 {
   "name": "seengeem-assistant-desktop",
   "productName": "مساعد سين جيم",
-  "version": "2.0.0",
+  "version": "2.2.0",
   "description": "تطبيق متابعة منصة سين جيم على الكمبيوتر",
   "main": "main.js",
   "author": "SeenGeem",
   "scripts": {
-    "prebuild": "node scripts/copy-www.js",
-    "start": "node scripts/copy-www.js && electron .",
-    "dist": "node scripts/copy-www.js && electron-builder --win --publish never",
-    "release": "node scripts/copy-www.js && electron-builder --win --publish always"
+    "start": "node scripts/make-icon.js && node scripts/copy-www.js && electron .",
+    "dist": "node scripts/make-icon.js && node scripts/copy-www.js && electron-builder --win --publish never"
   },
-  "dependencies": { "electron-updater": "^6.3.9" },
-  "devDependencies": { "electron": "^33.2.0", "electron-builder": "^25.1.8" },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
   "build": {
     "appId": "com.seengeem.assistant",
     "productName": "مساعد سين جيم",
-    "files": ["main.js", "preload.js", "www/**/*", "package.json"],
-    "win": { "target": "nsis" },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true, "perMachine": false },
-    "publish": [{ "provider": "github", "owner": "REPLACE_GITHUB_USER", "repo": "seengeem-hub" }]
+    "files": [
+      "main.js",
+      "preload.js",
+      "www/**/*",
+      "assets/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.png",
+      "executableName": "SeenGeemAssistant"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "runAfterFinish": true,
+      "deleteAppDataOnUninstall": false,
+      "artifactName": "SeenGeem-Assistant-Setup-${version}.exe",
+      "include": "build/installer.nsh"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "REPLACE_GITHUB_USER",
+        "repo": "seengeem-hub"
+      }
+    ],
+    "directories": {
+      "buildResources": "build"
+    }
   }
 }
