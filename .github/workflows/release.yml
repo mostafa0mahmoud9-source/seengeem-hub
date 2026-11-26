@@ -1,0 +1,87 @@
+name: Release
+# تشغيل: من تبويب Actions اضغط Run workflow، أو أنشئ Release جديد باسم tag مثل v2.0.1
+on:
+  workflow_dispatch:
+    inputs:
+      version: { description: 'رقم الإصدار (مثال 2.0.1)', required: true, default: '2.0.1' }
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+env:
+  VER: ${{ github.event.inputs.version || github.ref_name }}
+
+jobs:
+  desktop:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - name: ضبط الإصدار
+        shell: bash
+        run: |
+          V="${VER#v}"
+          sed -i "s#REPLACE_GITHUB_USER/seengeem-hub#${GITHUB_REPOSITORY}#; s#VER='2.0.0'#VER='${V}'#" mobile/www/index.html
+          cd desktop
+          npm pkg set version="$V"
+          npm pkg set "build.publish[0].owner=${GITHUB_REPOSITORY_OWNER}"
+          npm pkg set "build.publish[0].repo=${GITHUB_REPOSITORY#*/}"
+      - run: npm install
+        working-directory: desktop
+      - run: npm run dist
+        working-directory: desktop
+      - uses: actions/upload-artifact@v4
+        with:
+          name: desktop
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.blockmap
+            desktop/dist/latest.yml
+
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: 17 }
+      - name: بناء وتوقيع الـ APK
+        run: |
+          V="${VER#v}"
+          sed -i "s#REPLACE_GITHUB_USER/seengeem-hub#${GITHUB_REPOSITORY}#; s#VER='2.0.0'#VER='${V}'#" mobile/www/index.html
+          cd mobile
+          npm install
+          npx cap add android
+          npx cap sync android
+          sed -i "s/versionCode 1/versionCode ${GITHUB_RUN_NUMBER}/; s/versionName \"1.0\"/versionName \"${V}\"/" android/app/build.gradle
+          (cd android && ./gradlew assembleRelease)
+          D=android/app/build/outputs/apk/release
+          BT=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -1)
+          $BT/zipalign -p -f 4 $D/app-release-unsigned.apk $D/aligned.apk
+          echo "${{ secrets.ANDROID_KEYSTORE_B64 }}" | base64 -d > $RUNNER_TEMP/ks.jks
+          $BT/apksigner sign --ks $RUNNER_TEMP/ks.jks --ks-pass pass:${{ secrets.ANDROID_KEYSTORE_PASSWORD }} --ks-key-alias seengeem --out $D/SeenGeem-Assistant.apk $D/aligned.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: mobile/android/app/build/outputs/apk/release/SeenGeem-Assistant.apk
+
+  plugin:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: cd wp-plugin && zip -r ../seengeem-wa-bridge.zip seengeem-wa-bridge
+      - uses: actions/upload-artifact@v4
+        with: { name: plugin, path: seengeem-wa-bridge.zip }
+
+  publish:
+    needs: [desktop, android, plugin]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: out, merge-multiple: true }
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ env.VER }}
+          files: out/*
