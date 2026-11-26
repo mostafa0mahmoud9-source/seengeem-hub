@@ -45,6 +45,25 @@ add_action('rest_api_init', function () {
     }));
 });
 
+/** كود ربط قصير (6 أرقام) صالح 30 دقيقة: يكتبه المستخدم في البرنامج فيتربط بالموقع بدون نسخ مفاتيح. */
+function sgb_pair_code($fresh = false) {
+    $c = get_transient('sgb_pair');
+    if ($fresh || !$c) { $c = str_pad((string) wp_rand(0, 999999), 6, '0', STR_PAD_LEFT); set_transient('sgb_pair', $c, 1800); }
+    return $c;
+}
+add_action('rest_api_init', function () {
+    register_rest_route('sgb/v1', '/pair', array('methods' => 'GET', 'permission_callback' => '__return_true', 'callback' => function ($req) {
+        $n = (int) get_transient('sgb_pair_try');
+        if ($n >= 10) { return new WP_Error('too_many', 'محاولات كثيرة، انتظر 10 دقائق أو أنشئ كودًا جديدًا', array('status' => 429)); }
+        set_transient('sgb_pair_try', $n + 1, 600);
+        $c = get_transient('sgb_pair'); $p = preg_replace('/\D/', '', (string) $req->get_param('p'));
+        if (!$c || strlen($p) !== 6 || !hash_equals($c, $p)) { return new WP_Error('bad_code', 'كود الربط غير صحيح أو انتهت صلاحيته، اعمل كود جديد من صفحة ووردبريس', array('status' => 403)); }
+        $s = sgb_settings();
+        delete_transient('sgb_pair'); delete_transient('sgb_pair_try');
+        return array('u' => home_url(), 'k' => $s['api_key']);
+    }));
+});
+
 /** كود إعداد البرنامج (رابط الموقع + مفتاح الربط) لربط البرنامج بالموقع بضغطة واحدة. */
 function sgb_setup_code() {
     $s = sgb_settings();
@@ -53,6 +72,7 @@ function sgb_setup_code() {
 
 /** واجهة الـ QR (تُستخدم في صفحة «ربط الواتساب» وفي إعدادات «مساعد سين جيم»). */
 function sgb_qr_widget() {
+    if (isset($_GET['sgb_newpair']) && current_user_can('manage_options')) { sgb_pair_code(true); }
     $code = sgb_setup_code();
     $rest = esc_url_raw(rest_url('sgb/v1/'));
     $nonce = wp_create_nonce('wp_rest');
@@ -62,7 +82,10 @@ function sgb_qr_widget() {
   <p style="color:#555">افتح واتساب على موبايل الرقم ← <b>الأجهزة المرتبطة</b> ← <b>ربط جهاز</b> ← وجّه الكاميرا على الكود. الربط بيتم تلقائيًا ويتحدّث هنا لوحده.</p>
   <div id="sgb-off" style="display:none;background:#fff6e0;border:1px solid #f0d9a0;border-radius:10px;padding:12px;margin:10px 0">
     <b>برنامج الكمبيوتر غير متصل بالموقع.</b>
-    <div style="margin-top:6px">1) <a class="button button-primary" href="seengeem://setup?c=<?php echo esc_attr($code); ?>">🔗 ربط البرنامج بالموقع تلقائيًا</a> (لو البرنامج مثبّت) &nbsp; أو &nbsp; <a class="button" href="https://github.com/mostafa0mahmoud9-source/seengeem-hub/releases/latest" target="_blank" rel="noopener">⬇ تحميل البرنامج</a></div>
+    <div style="margin:10px 0;text-align:center"><div style="font-size:13px;color:#555">أسهل طريقة: افتح البرنامج واكتب هذا الكود في «كود الربط»:</div>
+      <div style="font-size:34px;letter-spacing:8px;font-weight:700;direction:ltr;color:#4b2a9a;margin:6px 0"><?php echo esc_html(sgb_pair_code()); ?></div>
+      <a href="<?php echo esc_url(add_query_arg('sgb_newpair', '1')); ?>" style="font-size:12px">كود جديد</a> · <span style="font-size:12px;color:#888">صالح 30 دقيقة</span></div>
+    <div style="margin-top:6px">أو: <a class="button button-primary" href="seengeem://setup?c=<?php echo esc_attr($code); ?>">🔗 ربط البرنامج بالموقع تلقائيًا</a> (لو البرنامج مثبّت) &nbsp; أو &nbsp; <a class="button" href="https://github.com/mostafa0mahmoud9-source/seengeem-hub/releases/latest" target="_blank" rel="noopener">⬇ تحميل البرنامج</a></div>
     <div style="margin-top:8px">2) أو الصق هذا الكود في البرنامج: «المزيد» ← «كود الإعداد السريع»:<br>
       <input type="text" readonly id="sgb-code" value="<?php echo esc_attr($code); ?>" style="width:100%;max-width:560px;direction:ltr" onclick="this.select()"></div>
   </div>
