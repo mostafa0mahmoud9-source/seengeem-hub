@@ -88,6 +88,12 @@ add_action('rest_api_init', function () {
         $gw = (array) get_option('sgb_gw', array());
         $gw[$ch] = array('state' => sanitize_key(isset($b['state']) ? $b['state'] : ''), 'phone' => sanitize_text_field(isset($b['phone']) ? $b['phone'] : ''), 'ts' => time());
         update_option('sgb_gw', $gw, false);
+        // عمر الخط كما يحدده البرنامج (يضبط مرحلة الحد اليومي)
+        if (!empty($b['since']) && (int) $b['since'] > time() - 3650 * 86400 && (int) $b['since'] <= time()) {
+            $f = get_option('sgb_qr_first', array());
+            $f = is_array($f) ? $f : array('students' => (int) $f, 'staff' => (int) $f);
+            if (!isset($f[$ch]) || (int) $f[$ch] !== (int) $b['since']) { $f[$ch] = (int) $b['since']; update_option('sgb_qr_first', $f, false); }
+        }
         return array('ok' => true);
     }));
     register_rest_route($ns, '/resume', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function () {
