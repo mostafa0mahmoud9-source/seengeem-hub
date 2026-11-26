@@ -180,8 +180,10 @@ function renderChannels(){
     if(ds&&ds.safe&&ok)h+='<p class="muted">🛡️ '+esc(ds.safe)+'</p>';
     if(ds&&ds.error&&!ok)h+='<p class="bad muted">'+esc(ds.error)+'</p>';
     if(ds&&ds.state==='qr'&&ds.qr)h+='<div style="text-align:center"><img alt="QR" src="'+ds.qr+'" style="width:230px;max-width:80%;background:#fff;padding:8px;border-radius:12px"><p class="muted">واتساب ← الأجهزة المرتبطة ← ربط جهاز ← امسح الكود</p></div>';
+    if(d&&ds&&ds.state==='ready'){var ag=ds.ageDays||0,cur=ag>=30?30:(ag>=14?14:(ag>=7?7:0));h+='<div class="muted" style="margin:6px 0">عمر الخط للحماية: <select style="width:auto;display:inline;margin:0" onchange="dsAge(\''+k+'\',this.value)"><option value="0"'+(cur===0?' selected':'')+'>رقم جديد</option><option value="14"'+(cur===14||cur===7?' selected':'')+'>أكثر من أسبوعين</option><option value="30"'+(cur===30?' selected':'')+'>رقم قديم نشط (أكثر من شهر)</option></select></div>'}
     if(d){h+='<div style="margin-bottom:8px">'+(ds&&ds.enabled===false?'<button class="btn" onclick="dsDo(\'connect\',\''+k+'\')">تشغيل هذا الرقم</button>':'<button class="btn alt" onclick="dsDo(\'connect\',\''+k+'\')">إعادة الاتصال</button> <button class="btn alt" onclick="dsDo(\'logout\',\''+k+'\')">فصل وربط رقم آخر</button> <button class="btn alt" onclick="dsDo(\'disable\',\''+k+'\')">إيقاف</button>')+'</div>'}
     return h}).join('')+(d?'':'<p class="muted">ربط الواتساب (QR) بيتم من برنامج الكمبيوتر، والتطبيق هنا بيعرض الحالة بس.</p>')}
+function dsAge(k,v){window.sgDesktop.setAge(k,+v).then(function(s){DS=s;renderHome();toast('تم ضبط عمر الخط')})}
 function dsDo(a,k){if(a==='logout'&&!confirm('فصل الرقم الحالي؟ هتحتاج تمسح كود جديد.'))return;window.sgDesktop[a](k).then(function(s){DS=s;renderHome()})}
 function renderHome(){if(!D){$('kpis').innerHTML='';$('steps').innerHTML='<p class="muted">اربط التطبيق بالموقع أولًا من «المزيد».</p>';$('chs').innerHTML='';$('emg').innerHTML='';return}
   var k=[['اتبعت اليوم',D.sent_today],['منتظرة',cnt(['queued','sending','qr_pending'])],['وصلت',cnt(['delivered','read'])],['فشلت',cnt(['failed'])]];
