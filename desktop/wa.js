@@ -78,6 +78,15 @@ function report(ch) {
 }
 function notify(body) { try { new Notification({ title: 'مساعد سين جيم', body }).show(); } catch (e) { /* ignore */ } }
 
+const ATT = {}; // عدد محاولات الفشل لكل رقم: نبدّل بين التشغيل المخفي والتشغيل بنافذة مصغّرة خارج الشاشة
+function wlog(m) { try { fs.appendFileSync(path.join(app.getPath('userData'), 'wa-log.txt'), new Date().toISOString() + ' ' + m + '\n'); } catch (e) { /* ignore */ } }
+function pupOpts(ch, exe) {
+  const alt = (ATT[ch] || 0) % 2 === 1;
+  const args = ['--no-first-run', '--no-default-browser-check', '--disable-gpu', '--disable-dev-shm-usage', '--disable-extensions', '--mute-audio', '--lang=ar'];
+  if (alt) { args.push('--window-position=-3000,-3000', '--start-minimized'); }
+  wlog(ch + ' تشغيل المتصفح، الوضع: ' + (alt ? 'نافذة مصغّرة' : 'مخفي') + '، ' + exe);
+  return { headless: !alt, executablePath: exe, args, protocolTimeout: 240000 };
+}
 async function startChannel(ch) {
   if (cfg.channels[ch] === false) return;
   if (RT[ch] && RT[ch].client) return;
@@ -88,7 +97,7 @@ async function startChannel(ch) {
   const gen = ((RT[ch] && RT[ch].gen) || 0) + 1;
   const client = new WW.Client({
     authStrategy: new WW.LocalAuth({ clientId: ch, dataPath: sessDir }),
-    puppeteer: { headless: true, executablePath: exe, args: ['--no-first-run', '--no-default-browser-check', '--disable-gpu', '--disable-dev-shm-usage'] },
+    puppeteer: pupOpts(ch, exe),
   });
   RT[ch] = { client, gen };
   setState(ch, { state: 'starting', qr: null, error: '' });
@@ -117,7 +126,7 @@ async function startChannel(ch) {
       await api('incoming', { method: 'POST', body: JSON.stringify({ channel: ch, from: (m.from || '').split('@')[0], body: m.body || '' }) });
     } catch (e) { /* ignore */ }
   });
-  client.initialize().catch(e => { setState(ch, { state: 'error', error: String(e && e.message || e) }); restartLater(ch, gen); });
+  client.initialize().catch(e => { ATT[ch] = (ATT[ch] || 0) + 1; wlog(ch + ' خطأ: ' + String(e && (e.stack || e.message) || e).slice(0, 600)); setState(ch, { state: 'error', error: String(e && e.message || e) + ' (محاولة ' + ATT[ch] + '، سيعاد التشغيل تلقائيًا)' }); restartLater(ch, gen); });
 }
 
 function restartLater(ch, gen) {
@@ -125,7 +134,7 @@ function restartLater(ch, gen) {
     if (!RT[ch] || RT[ch].gen !== gen) return;
     await stopChannel(ch, false);
     if (cfg.channels[ch] !== false) startChannel(ch);
-  }, 30000);
+  }, 20000);
 }
 
 async function stopChannel(ch, keepState) {
@@ -177,7 +186,7 @@ function init(opts) {
   load();
   CHANNELS.forEach(ch => { S[ch] = { state: 'idle', qr: null, phone: '', error: '' }; });
   started = true;
-  CHANNELS.forEach((ch, i) => setTimeout(() => startChannel(ch), 3000 + i * 6000)); // الـ QR يظهر حتى قبل ربط الموقع
+  CHANNELS.forEach((ch, i) => setTimeout(() => startChannel(ch), 3000 + i * 40000)); // الـ QR يظهر حتى قبل ربط الموقع
   setInterval(() => CHANNELS.forEach(ch => { if (S[ch] && S[ch].state !== 'idle') report(ch); }), 60000);
   // أوامر من صفحة ووردبريس (إعادة توليد الكود / فصل الرقم)
   setInterval(async () => {
@@ -194,7 +203,7 @@ async function setConfig(c) {
   cfg.site = c.site.trim(); cfg.key = c.key.trim();
   if (c.channels) cfg.channels = Object.assign(cfg.channels, c.channels);
   save();
-  if (started && changed) CHANNELS.forEach((ch, i) => { if (!RT[ch] || !RT[ch].client) setTimeout(() => startChannel(ch), 500 + i * 6000); else report(ch); });
+  if (started && changed) CHANNELS.forEach((ch, i) => { if (!RT[ch] || !RT[ch].client) setTimeout(() => startChannel(ch), 500 + i * 40000); else report(ch); });
   return getState();
 }
 async function connect(ch) {
