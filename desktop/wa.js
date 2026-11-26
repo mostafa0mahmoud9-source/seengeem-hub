@@ -88,6 +88,22 @@ function pupOpts(ch, exe) {
   wlog(ch + ' تشغيل المتصفح، الوضع: ' + (alt ? 'نافذة مصغّرة' : 'مخفي') + '، ' + exe);
   return { headless: !alt, executablePath: exe, args };
 }
+// تشخيص: عند الفشل نلتقط لقطة شاشة وعنوان صفحة المتصفح الداخلي ونرسلها للموقع لنعرف سبب التعليق
+async function diag(ch, client, exe, err) {
+  try {
+    const pg = client && client.pupPage; const d = { ch, t: Date.now(), v: app.getVersion(), exe, err: String(err && err.message || err).slice(0, 300) };
+    let tail = ''; try { tail = fs.readFileSync(path.join(app.getPath('userData'), 'wa-log.txt'), 'utf8').slice(-1500); } catch (e) { /* ignore */ }
+    d.log = tail;
+    if (pg) {
+      d.url = pg.url();
+      d.title = await pg.title().catch(() => '');
+      d.ua = await pg.evaluate(() => navigator.userAgent).catch(() => '');
+      d.text = await pg.evaluate(() => (document.body && document.body.innerText || '').slice(0, 700)).catch(() => '');
+      d.shot = await pg.screenshot({ type: 'jpeg', quality: 40, encoding: 'base64' }).catch(() => '');
+    }
+    await api('diag', { method: 'POST', body: JSON.stringify(d) });
+  } catch (e) { /* ignore */ }
+}
 async function startChannel(ch) {
   if (cfg.channels[ch] === false) return;
   if (RT[ch] && RT[ch].client) return;
@@ -127,7 +143,7 @@ async function startChannel(ch) {
       await api('incoming', { method: 'POST', body: JSON.stringify({ channel: ch, from: (m.from || '').split('@')[0], body: m.body || '' }) });
     } catch (e) { /* ignore */ }
   });
-  client.initialize().catch(e => { ATT[ch] = (ATT[ch] || 0) + 1; wlog(ch + ' خطأ: ' + String(e && (e.stack || e.message) || e).slice(0, 600)); setState(ch, { state: 'error', error: String(e && e.message || e) + ' (محاولة ' + ATT[ch] + '، سيعاد التشغيل تلقائيًا)' }); restartLater(ch, gen); });
+  client.initialize().catch(e => { diag(ch, client, exe, e); ATT[ch] = (ATT[ch] || 0) + 1; wlog(ch + ' خطأ: ' + String(e && (e.stack || e.message) || e).slice(0, 600)); setState(ch, { state: 'error', error: String(e && e.message || e) + ' (محاولة ' + ATT[ch] + '، سيعاد التشغيل تلقائيًا)' }); restartLater(ch, gen); });
 }
 
 function restartLater(ch, gen) {
