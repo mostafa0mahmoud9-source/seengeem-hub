@@ -177,6 +177,7 @@ function renderChannels(){
   $('chs').innerHTML=Object.keys(D.channels).map(function(k){var c=D.channels[k],ok=connected(k),g=D.gw&&D.gw[k],ds=d&&DS&&DS.channels&&DS.channels[k];
     var st=ok?('متصل ✔'+(g&&g.phone?' ('+esc(g.phone)+')':'')):(ds?DSN[ds.state]||ds.state:'غير مربوط');
     var h='<div class="row" style="flex-wrap:wrap"><span><b>'+esc(c.label)+'</b></span><span class="'+(ok?'ok':'bad')+'">'+st+'</span></div>';
+    if(ds&&ds.safe&&ok)h+='<p class="muted">🛡️ '+esc(ds.safe)+'</p>';
     if(ds&&ds.error&&!ok)h+='<p class="bad muted">'+esc(ds.error)+'</p>';
     if(ds&&ds.state==='qr'&&ds.qr)h+='<div style="text-align:center"><img alt="QR" src="'+ds.qr+'" style="width:230px;max-width:80%;background:#fff;padding:8px;border-radius:12px"><p class="muted">واتساب ← الأجهزة المرتبطة ← ربط جهاز ← امسح الكود</p></div>';
     if(d){h+='<div style="margin-bottom:8px">'+(ds&&ds.enabled===false?'<button class="btn" onclick="dsDo(\'connect\',\''+k+'\')">تشغيل هذا الرقم</button>':'<button class="btn alt" onclick="dsDo(\'connect\',\''+k+'\')">إعادة الاتصال</button> <button class="btn alt" onclick="dsDo(\'logout\',\''+k+'\')">فصل وربط رقم آخر</button> <button class="btn alt" onclick="dsDo(\'disable\',\''+k+'\')">إيقاف</button>')+'</div>'}
@@ -206,7 +207,7 @@ function renderMsgs(){$('chips').innerHTML=Object.keys(FN).map(function(k){retur
 function renderReplies(){$('ilist').innerHTML=D?(D.incoming.map(function(r){return '<div class="row"><div><b>'+esc(r.from_phone)+'</b> · '+CH[r.channel]+'<div class="muted">'+esc(r.body)+'</div></div><span class="muted">'+new Date(r.created*1000).toLocaleString('ar-EG')+'</span></div>'}).join('')||'<p class="muted">لا توجد ردود لسه</p>'):''}
 function renderProt(){var im=R.import,dg=R.digest||{},lb=R.last_backup;
   $('prot').innerHTML='<h3>حماية الرقم والإعدادات</h3>'+
-   '<div class="row"><span>تسخين الرقم تدريجيًا<br><small class="muted">الحد اليوم: '+(D?D.qr_cap:'-')+' رسالة لكل رقم ويزيد كل يوم</small></span><button class="btn alt" onclick="toggleWarm('+(R.warmup?0:1)+')">'+(R.warmup?'مفعّل ✔ (إيقاف)':'متوقف (تفعيل)')+'</button></div>'+
+   '<div class="row"><span>تسخين الرقم تدريجيًا<br><small class="muted">الحد اليوم: طلاب '+(D&&D.qr_cap?D.qr_cap.students:'-')+' | مدرسين '+(D&&D.qr_cap?D.qr_cap.staff:'-')+' — بيزيد تلقائيًا مع عمر الرقم</small></span><button class="btn alt" onclick="toggleWarm('+(R.warmup?0:1)+')">'+(R.warmup?'مفعّل ✔ (إيقاف)':'متوقف (تفعيل)')+'</button></div>'+
    '<div class="row"><span>رسائل العروض<br><small class="muted">'+(im.require_marketing?'تُرسل فقط لمن وافق على التسويق':'تُرسل لكل الطلاب واولياء الأمور')+'</small></span><button class="btn alt" onclick="impSet({require_marketing:'+(im.require_marketing?0:1)+'})">تغيير</button></div>'+
    '<div class="row" style="display:block"><b>ملخص الإدارة الأسبوعي (الجمعة 10 ص)</b><input id="dph" inputmode="tel" placeholder="رقم الإدارة '+esc(dg.phone||'')+'"><button class="btn" onclick="saveDigest('+(dg.enabled?0:1)+')">'+(dg.enabled?'إيقاف الملخص':'تفعيل الملخص')+'</button> <button class="btn alt" onclick="digestNow()">إرسال الآن</button></div>'+
    '<div class="row"><span>نسخة احتياطية يومية<br><small class="muted">'+(lb?'آخر نسخة: '+new Date(lb*1000).toLocaleString('ar-EG'):'لم تُؤخذ بعد')+'</small></span><button class="btn alt" onclick="backupNow()">خذ نسخة الآن</button></div>';
