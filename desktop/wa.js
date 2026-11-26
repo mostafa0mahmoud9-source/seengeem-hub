@@ -74,7 +74,7 @@ async function api(p, opt) {
 }
 function report(ch) {
   if (!cfg.site || !cfg.key || !S[ch]) return;
-  api('gw-status', { method: 'POST', body: JSON.stringify({ channel: ch, state: S[ch].state, phone: S[ch].phone, since: cfg.linked[ch] ? Math.floor(cfg.linked[ch] / 1000) : 0 }) }).catch(() => {});
+  api('gw-status', { method: 'POST', body: JSON.stringify({ channel: ch, state: S[ch].state, phone: S[ch].phone, qr: S[ch].state === 'qr' ? (S[ch].qr || '') : '', since: cfg.linked[ch] ? Math.floor(cfg.linked[ch] / 1000) : 0 }) }).catch(() => {});
 }
 function notify(body) { try { new Notification({ title: 'مساعد سين جيم', body }).show(); } catch (e) { /* ignore */ } }
 
@@ -179,6 +179,13 @@ function init(opts) {
   started = true;
   CHANNELS.forEach((ch, i) => setTimeout(() => startChannel(ch), 3000 + i * 6000)); // الـ QR يظهر حتى قبل ربط الموقع
   setInterval(() => CHANNELS.forEach(ch => { if (S[ch] && S[ch].state !== 'idle') report(ch); }), 60000);
+  // أوامر من صفحة ووردبريس (إعادة توليد الكود / فصل الرقم)
+  setInterval(async () => {
+    if (!cfg.site || !cfg.key) return;
+    for (const ch of CHANNELS) {
+      try { const r = await api('gw-cmd?channel=' + ch); if (r && r.cmd === 'logout') await logout(ch); else if (r && r.cmd === 'connect') await connect(ch); } catch (e) { /* ignore */ }
+    }
+  }, 8000);
 }
 
 async function setConfig(c) {

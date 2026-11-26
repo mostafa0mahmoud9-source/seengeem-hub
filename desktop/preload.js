@@ -8,5 +8,7 @@ contextBridge.exposeInMainWorld('sgDesktop', {
   disable: ch => ipcRenderer.invoke('sg:disable', ch),
   logout: ch => ipcRenderer.invoke('sg:logout', ch),
   setAge: (ch, d) => ipcRenderer.invoke('sg:age', ch, d),
+  getSetup: () => ipcRenderer.invoke('sg:setup-pending'),
+  onSetup: cb => { ipcRenderer.on('sg:setup', (_e, c) => cb(c)); },
   onState: cb => { ipcRenderer.on('sg:state', (_e, s) => cb(s)); },
 });

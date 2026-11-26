@@ -6,7 +6,16 @@ const wa = require('./wa');
 
 let win = null, tray = null, quitting = false, lastCheck = 0;
 if (!app.requestSingleInstanceLock()) { app.quit(); }
-app.on('second-instance', showWin);
+let pendingSetup = null;
+app.setAsDefaultProtocolClient('seengeem');
+function deepLink(u) {
+  const m = String(u || '').match(/^seengeem:\/\/setup\?c=([A-Za-z0-9+\/=_-]+)/);
+  if (!m) return;
+  pendingSetup = m[1];
+  if (win && !win.isDestroyed()) { showWin(); win.webContents.send('sg:setup', m[1]); }
+}
+app.on('second-instance', (_e, argv) => { showWin(); deepLink((argv || []).find(a => /^seengeem:\/\//.test(a))); });
+app.on('open-url', (e, u) => { e.preventDefault(); deepLink(u); });
 app.on('before-quit', () => { quitting = true; wa.shutdown().catch(() => {}); });
 
 const PAGES = 'https://mostafa0mahmoud9-source.github.io/';
@@ -59,11 +68,13 @@ ipcMain.handle('sg:config', (e, c) => (trusted(e) ? wa.setConfig(c && { site: c.
 ipcMain.handle('sg:connect', (e, ch) => (trusted(e) ? wa.connect(ch) : null));
 ipcMain.handle('sg:disable', (e, ch) => (trusted(e) ? wa.disable(ch) : null));
 ipcMain.handle('sg:age', (e, ch, d) => (trusted(e) ? wa.setAge(ch, d) : null));
+ipcMain.handle('sg:setup-pending', e => { if (!trusted(e)) return null; const c = pendingSetup; pendingSetup = null; return c; });
 ipcMain.handle('sg:logout', (e, ch) => (trusted(e) ? wa.logout(ch) : null));
 
 app.whenReady().then(() => {
   createWindow();
   createTray();
+  deepLink(process.argv.find(a => /^seengeem:\/\//.test(a)));
   powerSaveBlocker.start('prevent-app-suspension'); // لا يدخل البرنامج في سكون أثناء الإرسال
   // أول تشغيل: يعمل تلقائيًا مع ويندوز (يمكن إيقافه من أيقونة الشريط)
   const flag = path.join(app.getPath('userData'), 'autostart-set');
