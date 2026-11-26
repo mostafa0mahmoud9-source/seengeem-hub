@@ -163,7 +163,7 @@ function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return
 function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';setTimeout(function(){t.style.display='none'},2600)}
 function fmtErr(e){var m=e&&e.message||String(e);return /Failed to fetch|NetworkError|aborted/i.test(m)?'تعذّر الاتصال بالموقع، تأكد من الإنترنت':m}
 function api(p,o){o=o||{};var c=new AbortController(),tm=setTimeout(function(){c.abort()},20000);
-  return fetch(S.url.replace(/\/$/,'')+'/wp-json/sgb/v1/'+p,{method:o.method||'GET',body:o.body,signal:c.signal,headers:{'X-SGB-Key':S.key,'Content-Type':'application/json'}})
+  return fetch(S.url.replace(/\/$/,'')+'/wp-json/sgb/v1/'+p+(p.indexOf('?')<0?'?':'&')+'_k='+encodeURIComponent(S.key),{method:o.method||'GET',body:o.body,signal:c.signal,headers:o.body?{'Content-Type':'text/plain'}:{}})
   .then(function(r){clearTimeout(tm);return r.json().catch(function(){return{}}).then(function(j){if(!r.ok)throw new Error(j.message||('خطأ '+r.status));return j})})}
 function post(p,b){return api(p,{method:'POST',body:JSON.stringify(b||{})})}
 function go(t){if(t==='teach'&&S.url&&S.key)loadTeach();document.querySelectorAll('main>section').forEach(function(s){s.classList.toggle('on',s.id==='v-'+t)});
