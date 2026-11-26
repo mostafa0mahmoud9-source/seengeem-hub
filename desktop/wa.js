@@ -13,15 +13,32 @@ const LABEL = { students: 'رقم الطلاب وأولياء الأمور', sta
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 const rnd = (a, b) => a + Math.floor(Math.random() * (b - a + 1));
 
-let cfg = { site: '', key: '', channels: { students: true, staff: true } };
+let cfg = { site: '', key: '', channels: { students: true, staff: true }, linked: {} };
 let cfgPath = '', sessDir = '';
 const S = {};          // حالة كل قناة
 const RT = {};         // كائنات التشغيل (client, gen)
 let onChange = () => {};
 let QRCode = null, WW = null, started = false;
 
+/**
+ * ملف الأمان لكل خط: يتحدد تلقائيًا حسب عمر ربط الرقم بالبرنامج، ويخفّ تدريجيًا.
+ * delay = فاصل عشوائي بين الرسائل (ثواني)، every = راحة بعد كل كذا رسالة، rest = مدة الراحة (ثواني).
+ */
+const PHASES = [
+  { upto: 7,  name: 'مرحلة 1: رقم جديد (حذر عالي)',  delay: [20, 45], every: 10, rest: [180, 300] },
+  { upto: 14, name: 'مرحلة 2: تسخين',               delay: [15, 35], every: 15, rest: [120, 240] },
+  { upto: 30, name: 'مرحلة 3: نشاط متوسط',          delay: [10, 25], every: 20, rest: [120, 240] },
+  { upto: 1e9, name: 'مرحلة 4: رقم مستقر',          delay: [7, 18],  every: 20, rest: [120, 240] },
+];
+function phaseOf(ch) {
+  const t = cfg.linked && cfg.linked[ch];
+  const days = t ? (Date.now() - t) / 86400000 : 0;
+  return PHASES.find(p => days < p.upto);
+}
+
 function load() {
   try { cfg = Object.assign(cfg, JSON.parse(fs.readFileSync(cfgPath, 'utf8'))); } catch (e) { /* أول تشغيل */ }
+  cfg.linked = cfg.linked || {};
   cfg.channels = Object.assign({ students: true, staff: true }, cfg.channels || {});
 }
 function save() { try { fs.writeFileSync(cfgPath, JSON.stringify(cfg)); } catch (e) { /* ignore */ } }
@@ -45,7 +62,7 @@ function setState(ch, patch) {
 }
 function getState() {
   const out = { configured: !!(cfg.site && cfg.key), channels: {} };
-  CHANNELS.forEach(ch => { out.channels[ch] = Object.assign({ label: LABEL[ch], state: 'idle', qr: null, phone: '', error: '' }, S[ch] || {}, { enabled: cfg.channels[ch] !== false }); });
+  CHANNELS.forEach(ch => { out.channels[ch] = Object.assign({ label: LABEL[ch], state: 'idle', qr: null, phone: '', error: '' }, S[ch] || {}, { enabled: cfg.channels[ch] !== false, safe: phaseOf(ch).name }); });
   return out;
 }
 
@@ -84,6 +101,7 @@ async function startChannel(ch) {
   client.on('auth_failure', m => setState(ch, { state: 'error', qr: null, error: 'فشل التوثيق: ' + m }));
   client.on('ready', () => {
     const ph = client.info && client.info.wid ? client.info.wid.user : '';
+    if (!cfg.linked[ch]) { cfg.linked[ch] = Date.now(); save(); } // بداية عدّ عمر الخط
     setState(ch, { state: 'ready', qr: null, phone: ph, error: '' });
     notify('تم ربط ' + LABEL[ch] + (ph ? ' (' + ph + ')' : '') + ' ✅');
     loop(ch, gen);
@@ -117,23 +135,35 @@ async function stopChannel(ch, keepState) {
 }
 
 async function loop(ch, gen) {
-  let sentRun = 0;
+  let sentRun = 0, fails = 0;
   while (RT[ch] && RT[ch].gen === gen && RT[ch].client && S[ch] && S[ch].state === 'ready') {
     try {
       const items = await api('pull?channel=' + ch);
       for (const it of items) {
         if (!RT[ch] || RT[ch].gen !== gen) return;
+        const ph = phaseOf(ch);
+        let slow = fails >= 2 ? 2 : 1;               // تبطيء تلقائي بعد فشلين متتاليين
         try {
           const num = await RT[ch].client.getNumberId(it.to_phone);
           if (!num) throw new Error('الرقم غير مسجل على واتساب');
+          // محاكاة بشرية: «يكتب...» لمدة قصيرة قبل الإرسال
+          try { const chat = await RT[ch].client.getChatById(num._serialized); await chat.sendStateTyping(); await sleep(rnd(1500, 4000)); } catch (e) { /* ليست أساسية */ }
           const msg = await RT[ch].client.sendMessage(num._serialized, it.body);
           await api('ack', { method: 'POST', body: JSON.stringify({ id: it.id, ok: true, wa_id: msg && msg.id && msg.id._serialized }) });
-          sentRun++;
+          sentRun++; fails = 0;
         } catch (e) {
-          await api('ack', { method: 'POST', body: JSON.stringify({ id: it.id, ok: false, error: String(e && e.message || e).slice(0, 200) }) }).catch(() => {});
+          const m = String(e && e.message || e);
+          if (m.indexOf('غير مسجل') < 0) fails++;     // رقم غير موجود ليس مؤشر مشكلة في الخط
+          await api('ack', { method: 'POST', body: JSON.stringify({ id: it.id, ok: false, error: m.slice(0, 200) }) }).catch(() => {});
         }
-        await sleep(rnd(7000, 18000));              // فاصل عشوائي بين كل رسالة
-        if (sentRun > 0 && sentRun % 20 === 0) { await sleep(rnd(120000, 240000)); } // راحة قصيرة كل 20 رسالة
+        if (fails >= 4) {                              // فشل متكرر: وقف نصف ساعة لحماية الرقم
+          notify('توقف الإرسال على ' + LABEL[ch] + ' نصف ساعة لتكرار الفشل. راجع الاتصال.');
+          setState(ch, { error: 'توقف مؤقت لتكرار الفشل (نصف ساعة)' });
+          fails = 0; await sleep(30 * 60000); setState(ch, { error: '' });
+          break;
+        }
+        await sleep(rnd(ph.delay[0], ph.delay[1]) * 1000 * slow);
+        if (sentRun > 0 && sentRun % ph.every === 0) { await sleep(rnd(ph.rest[0], ph.rest[1]) * 1000); }
       }
     } catch (e) { /* مشكلة اتصال مؤقتة */ }
     await sleep(10000);
