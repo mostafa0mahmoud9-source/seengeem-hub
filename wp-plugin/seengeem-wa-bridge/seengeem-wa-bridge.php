@@ -2,13 +2,13 @@
 /**
  * Plugin Name: SeenGeem WhatsApp Bridge
  * Description: جسر واتساب لمساعد سين جيم: رقمان (طلاب وأولياء أمور / مدرسين ومتابعة)، Cloud API رسمي + بوابة QR احتياطية، طابور رسائل، تتبع التسليم، وواجهة API للتطبيقات.
- * Version: 2.0.0
+ * Version: 2.3.0
  * Author: SeenGeem
  * Text Domain: sgb
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('SGB_VER', '2.0.0');
+define('SGB_VER', '2.3.0');
 define('SGB_OPT', 'sgb_settings');
 
 /* ───────────── الإعدادات ───────────── */
@@ -253,14 +253,7 @@ add_action('rest_api_init', function () {
         }
         return $out;
     }));
-    register_rest_route($ns, '/pull', array('methods' => 'GET', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
-        global $wpdb;
-        $t = $wpdb->prefix . 'sgb_outbox';
-        $ch = $req->get_param('channel') === 'staff' ? 'staff' : 'students';
-        $rows = $wpdb->get_results($wpdb->prepare("SELECT id,to_phone,body FROM $t WHERE status='qr_pending' AND channel=%s ORDER BY priority DESC, id ASC LIMIT 20", $ch));
-        foreach ($rows as $r) { $wpdb->update($t, array('status' => 'sending'), array('id' => $r->id)); }
-        return $rows;
-    }));
+    register_rest_route($ns, '/pull', array('methods' => 'GET', 'permission_callback' => 'sgb_auth', 'callback' => 'sgb_pull'));
     register_rest_route($ns, '/ack', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
         global $wpdb;
         $t = $wpdb->prefix . 'sgb_outbox';
@@ -272,6 +265,7 @@ add_action('rest_api_init', function () {
             'wa_id'   => $ok && !empty($b['wa_id']) ? sanitize_text_field($b['wa_id']) : null,
             'error'   => $ok ? null : sanitize_text_field(isset($b['error']) ? $b['error'] : 'qr_failed'),
         ), array('id' => (int) $b['id']));
+        sgb_after_ack((int) $b['id'], $ok, isset($b['error']) ? (string) $b['error'] : '');
         return array('ok' => true);
     }));
     register_rest_route($ns, '/incoming', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
@@ -366,7 +360,7 @@ function sgb_stats() {
     $s = sgb_settings();
     $conn = array();
     foreach ($s['channels'] as $k => $c) { $conn[$k] = array('label' => $c['label'], 'mode' => $c['mode'], 'cloud_ready' => (bool) ($c['phone_number_id'] && $c['token'])); }
-    return array('time' => time(), 'sent_today' => $today, 'by' => $by, 'recent' => $recent, 'incoming' => $inc, 'channels' => $conn, 'quiet_now' => sgb_in_quiet_hours(), 'version' => SGB_VER);
+    return array('time' => time(), 'sent_today' => $today, 'by' => $by, 'recent' => $recent, 'incoming' => $inc, 'channels' => $conn, 'quiet_now' => sgb_in_quiet_hours(), 'version' => SGB_VER, 'gw' => get_option('sgb_gw', array()), 'paused' => sgb_paused_info(), 'qr_cap' => sgb_qr_cap());
 }
 
 /* ───────────── صفحة الإعدادات ───────────── */
@@ -417,3 +411,4 @@ function sgb_page() {
     echo '<tr><th>ربطها بالقواعد الحالية</th><td><code>do_action(\'sgb_enqueue\', \'students\', $phone, $text, array(\'rule\' =&gt; \'renew_7\', \'dedupe\' =&gt; \'renew_7:\'.$id));</code></td></tr></table></div>';
 }
 require_once __DIR__ . '/includes/import.php';
+require_once __DIR__ . '/includes/extras.php';
