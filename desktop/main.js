@@ -58,6 +58,7 @@ ipcMain.handle('sg:state', e => (trusted(e) ? wa.getState() : null));
 ipcMain.handle('sg:config', (e, c) => (trusted(e) ? wa.setConfig(c && { site: c.site || c.url, key: c.key }) : null));
 ipcMain.handle('sg:connect', (e, ch) => (trusted(e) ? wa.connect(ch) : null));
 ipcMain.handle('sg:disable', (e, ch) => (trusted(e) ? wa.disable(ch) : null));
+ipcMain.handle('sg:age', (e, ch, d) => (trusted(e) ? wa.setAge(ch, d) : null));
 ipcMain.handle('sg:logout', (e, ch) => (trusted(e) ? wa.logout(ch) : null));
 
 app.whenReady().then(() => {

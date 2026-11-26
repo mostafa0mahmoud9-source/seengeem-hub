@@ -62,7 +62,7 @@ function setState(ch, patch) {
 }
 function getState() {
   const out = { configured: !!(cfg.site && cfg.key), channels: {} };
-  CHANNELS.forEach(ch => { out.channels[ch] = Object.assign({ label: LABEL[ch], state: 'idle', qr: null, phone: '', error: '' }, S[ch] || {}, { enabled: cfg.channels[ch] !== false, safe: phaseOf(ch).name }); });
+  CHANNELS.forEach(ch => { out.channels[ch] = Object.assign({ label: LABEL[ch], state: 'idle', qr: null, phone: '', error: '' }, S[ch] || {}, { enabled: cfg.channels[ch] !== false, safe: phaseOf(ch).name, ageDays: cfg.linked[ch] ? Math.floor((Date.now() - cfg.linked[ch]) / 86400000) : 0 }); });
   return out;
 }
 
@@ -74,7 +74,7 @@ async function api(p, opt) {
 }
 function report(ch) {
   if (!cfg.site || !cfg.key || !S[ch]) return;
-  api('gw-status', { method: 'POST', body: JSON.stringify({ channel: ch, state: S[ch].state, phone: S[ch].phone }) }).catch(() => {});
+  api('gw-status', { method: 'POST', body: JSON.stringify({ channel: ch, state: S[ch].state, phone: S[ch].phone, since: cfg.linked[ch] ? Math.floor(cfg.linked[ch] / 1000) : 0 }) }).catch(() => {});
 }
 function notify(body) { try { new Notification({ title: 'مساعد سين جيم', body }).show(); } catch (e) { /* ignore */ } }
 
@@ -214,10 +214,17 @@ async function logout(ch) {
   if (cfg.channels[ch] !== false) startChannel(ch);
   return getState();
 }
+async function setAge(ch, days) {
+  if (!CHANNELS.includes(ch)) return getState();
+  const d = Math.max(0, Math.min(3650, Number(days) || 0));
+  cfg.linked[ch] = Date.now() - d * 86400000; save();
+  setState(ch, {});
+  return getState();
+}
 async function shutdown() { for (const ch of CHANNELS) { await stopChannel(ch, true); } }
 function summary() {
   const st = getState().channels;
   return CHANNELS.map(ch => (ch === 'students' ? 'الطلاب' : 'المدرسين') + ': ' + ({ ready: 'متصل', qr: 'بانتظار الكود', starting: 'جاري التشغيل', idle: 'غير مربوط', disconnected: 'منفصل', error: 'خطأ', no_browser: 'يحتاج Chrome' }[st[ch].state] || st[ch].state)).join(' | ');
 }
 
-module.exports = { init, setConfig, getState, connect, disable, logout, shutdown, summary };
+module.exports = { init, setConfig, getState, connect, disable, logout, setAge, shutdown, summary };
