@@ -48,8 +48,8 @@ function findBrowser() {
   const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
   const la = process.env['LOCALAPPDATA'] || '';
   const list = [
-    pf + '\\Google\\Chrome\\Application\\chrome.exe', pf86 + '\\Google\\Chrome\\Application\\chrome.exe', la + '\\Google\\Chrome\\Application\\chrome.exe',
-    pf86 + '\\Microsoft\\Edge\\Application\\msedge.exe', pf + '\\Microsoft\\Edge\\Application\\msedge.exe',
+    pf86 + '\\Microsoft\\Edge\\Application\\msedge.exe', pf + '\\Microsoft\\Edge\\Application\\msedge.exe', pf + '\\Google\\Chrome\\Application\\chrome.exe',
+    pf86 + '\\Google\\Chrome\\Application\\chrome.exe', la + '\\Microsoft\\Edge\\Application\\msedge.exe', la + '\\Google\\Chrome\\Application\\chrome.exe',
     '/usr/bin/google-chrome', '/usr/bin/chromium', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   ];
   return list.find(p => { try { return p && fs.existsSync(p); } catch (e) { return false; } }) || '';
@@ -83,10 +83,10 @@ const ATT = {}; // عدد محاولات الفشل لكل رقم: نبدّل ب
 function wlog(m) { try { fs.appendFileSync(path.join(app.getPath('userData'), 'wa-log.txt'), new Date().toISOString() + ' ' + m + '\n'); } catch (e) { /* ignore */ } }
 function pupOpts(ch, exe) {
   const alt = (ATT[ch] || 0) % 2 === 1;
-  const args = ['--no-first-run', '--no-default-browser-check', '--disable-gpu', '--disable-dev-shm-usage', '--disable-extensions', '--mute-audio', '--lang=ar'];
+  const args = ['--no-sandbox', '--disable-gpu'];
   if (alt) { args.push('--window-position=-3000,-3000', '--start-minimized'); }
   wlog(ch + ' تشغيل المتصفح، الوضع: ' + (alt ? 'نافذة مصغّرة' : 'مخفي') + '، ' + exe);
-  return { headless: !alt, executablePath: exe, args, protocolTimeout: 240000 };
+  return { headless: !alt, executablePath: exe, args };
 }
 async function startChannel(ch) {
   if (cfg.channels[ch] === false) return;
@@ -99,7 +99,6 @@ async function startChannel(ch) {
   const client = new WW.Client({
     authStrategy: new WW.LocalAuth({ clientId: ch, dataPath: sessDir }),
     puppeteer: pupOpts(ch, exe),
-    userAgent: UA, // الافتراضي في المكتبة قديم (Chrome 101) وواتساب ويب بيرفضه فيفضل بدون تحميل
   });
   RT[ch] = { client, gen };
   setState(ch, { state: 'starting', qr: null, error: '' });

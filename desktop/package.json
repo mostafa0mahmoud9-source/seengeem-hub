@@ -11,7 +11,7 @@
   },
   "dependencies": {
     "electron-updater": "^6.3.9",
-    "whatsapp-web.js": "^1.26.0",
+    "whatsapp-web.js": "1.34.8",
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
