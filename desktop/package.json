@@ -1,7 +1,7 @@
 {
   "name": "seengeem-assistant-desktop",
   "productName": "مساعد سين جيم",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "تطبيق متابعة منصة سين جيم على الكمبيوتر",
   "main": "main.js",
   "author": "SeenGeem",
@@ -10,7 +10,9 @@
     "dist": "node scripts/make-icon.js && node scripts/copy-www.js && electron-builder --win --publish never"
   },
   "dependencies": {
-    "electron-updater": "^6.3.9"
+    "electron-updater": "^6.3.9",
+    "whatsapp-web.js": "^1.26.0",
+    "qrcode": "^1.5.4"
   },
   "devDependencies": {
     "electron": "^33.2.0",
@@ -21,6 +23,7 @@
     "productName": "مساعد سين جيم",
     "files": [
       "main.js",
+      "wa.js",
       "preload.js",
       "www/**/*",
       "assets/**/*",
