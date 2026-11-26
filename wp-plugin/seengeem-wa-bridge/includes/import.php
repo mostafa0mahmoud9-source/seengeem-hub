@@ -8,7 +8,7 @@
 if (!defined('ABSPATH')) { exit; }
 
 function sgb_imp_defaults() {
-    return array('mode' => 'off', 'require_consent' => 1, 'per_contact_cap' => 2, 'templates' => '', 'statuses' => 'preview,queued,pending,due');
+    return array('mode' => 'off', 'require_consent' => 1, 'require_marketing' => 0, 'per_contact_cap' => 2, 'templates' => '', 'statuses' => 'preview,queued,pending,due');
 }
 function sgb_imp_settings() {
     return array_replace(sgb_imp_defaults(), (array) get_option('sgb_import', array()));
@@ -34,7 +34,7 @@ function sgb_import_decide($job, $contact, $cfg, $now) {
     if ((int) (isset($contact['opted_out']) ? $contact['opted_out'] : 0)) { return array(false, 'opted_out'); }
     if ((int) (isset($contact['paused_until']) ? $contact['paused_until'] : 0) > $now) { return array(false, 'paused'); }
     if (!empty($cfg['require_consent']) && !(int) (isset($contact['consent']) ? $contact['consent'] : 0)) { return array(false, 'no_consent'); }
-    if ((isset($job['category']) ? $job['category'] : '') === 'marketing' && !(int) (isset($contact['marketing']) ? $contact['marketing'] : 0)) { return array(false, 'no_marketing'); }
+    if (!empty($cfg['require_marketing']) && (isset($job['category']) ? $job['category'] : '') === 'marketing' && !(int) (isset($contact['marketing']) ? $contact['marketing'] : 0)) { return array(false, 'no_marketing'); }
     if (trim((string) (isset($job['body']) ? $job['body'] : '')) === '') { return array(false, 'empty'); }
     return array(true, 'ok');
 }
@@ -117,7 +117,7 @@ add_action('rest_api_init', function () {
         for ($i = 6; $i >= 0; $i--) { $days[wp_date('Y-m-d', time() - $i * 86400)] = 0; }
         foreach ($sent as $ts) { $d = wp_date('Y-m-d', (int) $ts); if (isset($days[$d])) { $days[$d]++; } }
         $cfg = sgb_imp_settings();
-        return array('by_rule' => $by_rule, 'daily' => $days, 'import' => array('mode' => $cfg['mode'], 'require_consent' => (int) $cfg['require_consent'], 'per_contact_cap' => (int) $cfg['per_contact_cap'], 'last' => get_option('sgb_import_last', null)));
+        return apply_filters('sgb_report', array('by_rule' => $by_rule, 'daily' => $days, 'import' => array('mode' => $cfg['mode'], 'require_consent' => (int) $cfg['require_consent'], 'require_marketing' => (int) $cfg['require_marketing'], 'per_contact_cap' => (int) $cfg['per_contact_cap'], 'last' => get_option('sgb_import_last', null))));
     }));
     register_rest_route('sgb/v1', '/import-run', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function () { return sgb_import_run(); }));
     register_rest_route('sgb/v1', '/import-settings', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
@@ -125,6 +125,7 @@ add_action('rest_api_init', function () {
         $cfg = sgb_imp_settings();
         if (isset($b['mode']) && in_array($b['mode'], array('off', 'auto'), true)) { $cfg['mode'] = $b['mode']; }
         if (isset($b['require_consent'])) { $cfg['require_consent'] = $b['require_consent'] ? 1 : 0; }
+        if (isset($b['require_marketing'])) { $cfg['require_marketing'] = $b['require_marketing'] ? 1 : 0; }
         if (isset($b['per_contact_cap'])) { $cfg['per_contact_cap'] = max(1, min(20, (int) $b['per_contact_cap'])); }
         update_option('sgb_import', $cfg, false);
         return array('ok' => true, 'import' => $cfg);
