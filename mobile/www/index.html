@@ -126,7 +126,7 @@ iframe{width:100%;height:75vh;border:0;border-radius:12px;background:#fff}
     <label>الرسالة</label><textarea id="tbd" rows="3">رسالة تجربة من مساعد سين جيم 💜</textarea>
     <button class="btn" onclick="sendTest()">إرسال</button> <span id="tres"></span></div>
   <div class="card"><h3>🔗 الاتصال بالموقع</h3>
-    <label>كود الإعداد السريع (الأسهل)</label><input id="code" placeholder="الصق الكود هنا ثم اضغط حفظ">
+    <label>كود الربط (6 أرقام من صفحة «ربط الواتساب» في ووردبريس)</label><input id="code" inputmode="numeric" placeholder="مثال: 483921">
     <details><summary>أو أدخل البيانات يدويًا</summary>
     <label>رابط الموقع</label><input id="url" placeholder="https://seengeem-eg.com">
     <label>مفتاح الربط</label><input id="key" type="password" autocomplete="off"></details>
@@ -266,7 +266,11 @@ function sendTest(){post('send-test',{channel:$('tch').value,phone:$('tph').valu
 function openAssistant(){if(!S.url){toast('اربط الموقع أولًا');return}$('asw').innerHTML='<iframe src="'+esc(S.url.replace(/\/$/,''))+'/seengeem-assistant/"></iframe>'}
 function parseCode(t){t=(t||'').trim();var m=t.match(/setup=([A-Za-z0-9+\/=_-]+)/);if(m)t=m[1];
   try{var j=JSON.parse(atob(t.replace(/-/g,'+').replace(/_/g,'/')));return j&&j.u&&j.k?j:null}catch(e){return null}}
-function saveCfg(){var c=parseCode($('code').value);
+var DEF_URL='https://seengeem-eg.com';
+function saveCfg(){var raw=($('code').value||'').trim();
+  if(/^\d{6}$/.test(raw)){var base=($('url').value.trim()||S.url||DEF_URL).replace(/\/$/,'');$('cres').textContent='جاري الربط...';
+    fetch(base+'/wp-json/sgb/v1/pair?p='+raw).then(function(r){return r.json().then(function(j){if(!r.ok)throw new Error(j.message||('خطأ '+r.status));return j})}).then(function(j){$('code').value=btoa(JSON.stringify({u:j.u,k:j.k}));saveCfg()}).catch(function(e){$('cres').innerHTML='<span class="bad">'+esc(fmtErr(e))+'</span>'});return}
+  var c=parseCode(raw);
   if(c){S.url=c.u;S.key=c.k}else{S.url=$('url').value.trim();S.key=$('key').value.trim()}
   if(!/^https?:\/\//.test(S.url)){$('cres').innerHTML='<span class="bad">رابط الموقع غير صحيح</span>';return}
   lsSet('sgb_url',S.url);lsSet('sgb_key',S.key);$('url').value=S.url;$('key').value=S.key;$('code').value='';
