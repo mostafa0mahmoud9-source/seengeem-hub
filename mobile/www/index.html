@@ -75,12 +75,21 @@ iframe{width:100%;height:75vh;border:0;border-radius:12px;background:#fff}
 </section>
 
 <section id="v-msgs">
-  <div class="card">
-    <div class="chips" id="chips"></div>
-    <input id="q" placeholder="ابحث برقم أو بنص الرسالة..." oninput="renderMsgs()">
-    <div id="mlist"></div>
+  <div class="chips" id="mv" style="margin-bottom:10px">
+    <button class="chip on" data-m="log" onclick="setMV('log')">السجل</button>
+    <button class="chip" data-m="q" onclick="setMV('q')">✏️ منتظرة (تعديل لمرة واحدة)</button>
+    <button class="chip" data-m="r" onclick="setMV('r')">📝 أنواع الرسائل (تعديل دائم)</button>
   </div>
-  <button class="btn alt" onclick="retryAll()">🔁 إعادة محاولة الرسائل الفاشلة</button>
+  <div id="mlog">
+    <div class="card">
+      <div class="chips" id="chips"></div>
+      <input id="q" placeholder="ابحث برقم أو بنص الرسالة..." oninput="renderMsgs()">
+      <div id="mlist"></div>
+    </div>
+    <button class="btn alt" onclick="retryAll()">🔁 إعادة محاولة الرسائل الفاشلة</button>
+  </div>
+  <div id="mq" style="display:none"><div class="card"><h3>الرسائل المنتظرة</h3><p class="muted">عدّل نص رسالة قبل ما تتبعت، أو ألغِها. التعديل هنا على الرسالة دي بس.</p><div id="qlist"></div></div></div>
+  <div id="mr" style="display:none"><div class="card"><h3>أنواع الرسائل</h3><p class="muted">عدّل نص أي نوع بشكل دائم (يسري على الرسائل الجاية)، أو أوقف النوع كله. استخدم المتغيرات بين أقواس مثل {name}.</p><div id="rlist"></div></div></div>
 </section>
 
 <section id="v-replies"><div class="card"><h3>الردود الواردة</h3><div id="ilist"></div></div></section>
@@ -131,7 +140,7 @@ var S={url:lsGet('sgb_url'),key:lsGet('sgb_key')},D=null,R=null,ERR=null,F='all'
 var ST={queued:'بالانتظار',qr_pending:'بانتظار QR',sending:'جاري الإرسال',sent:'أُرسلت',delivered:'وصلت',read:'قُرئت',failed:'فشلت'};
 var CH={students:'طلاب/أولياء أمور',staff:'مدرسين/متابعة'};
 var RULE={success:'تهنئة النجاح',renew_7:'تجديد قبل 7 أيام',renew_2:'تجديد قبل يومين',expired:'انتهاء الاشتراك',winback:'عرض العودة',lead_welcome:'ترحيب بالمسجّل',lead_help:'مساعدة اختيار الاشتراك',lead_offer:'عرض أول اشتراك',inactive:'غياب 3 أيام',unwatched:'درس لم يُبدأ',incomplete:'درس لم يكتمل',quiz_due:'امتحان لم يُحل',low_score:'دعم بعد نتيجة ضعيفة',parent_followup:'متابعة ولي الأمر',weekly:'تقرير أسبوعي',shoot_24:'تذكير تصوير (24 ساعة)',shoot_2:'تذكير تصوير (ساعتين)',teacher_late:'متابعة تأخير التصوير',motivation:'تشجيع أسبوعي',manager_digest:'ملخص الإدارة',manual:'يدوي / تجربة'};
-var REASON={no_consent:'بدون موافقة مسجّلة',opted_out:'طلب الإيقاف',paused:'موقوف مؤقتًا',not_due:'لم يحن موعده (بيتبعت في وقته)',no_phone:'بدون رقم',bad_phone:'رقم غير صالح',contact_cap:'تجاوز حد الرقم اليومي',status:'حالة غير مؤهلة',no_contact:'جهة غير معروفة',no_marketing:'رسالة عروض بدون موافقة تسويق',empty:'نص فارغ',duplicate:'مكررة (اتبعتت قبل كده)',optout:'إيقاف'};
+var REASON={rule_off:'نوع موقوف',no_consent:'بدون موافقة مسجّلة',opted_out:'طلب الإيقاف',paused:'موقوف مؤقتًا',not_due:'لم يحن موعده (بيتبعت في وقته)',no_phone:'بدون رقم',bad_phone:'رقم غير صالح',contact_cap:'تجاوز حد الرقم اليومي',status:'حالة غير مؤهلة',no_contact:'جهة غير معروفة',no_marketing:'رسالة عروض بدون موافقة تسويق',empty:'نص فارغ',duplicate:'مكررة (اتبعتت قبل كده)',optout:'إيقاف'};
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';setTimeout(function(){t.style.display='none'},2600)}
 function fmtErr(e){var m=e&&e.message||String(e);return /Failed to fetch|NetworkError|aborted/i.test(m)?'تعذّر الاتصال بالموقع، تأكد من الإنترنت':m}
@@ -243,6 +252,31 @@ function saveCfg(){var c=parseCode($('code').value);
   if(!/^https?:\/\//.test(S.url)){$('cres').innerHTML='<span class="bad">رابط الموقع غير صحيح</span>';return}
   lsSet('sgb_url',S.url);lsSet('sgb_key',S.key);$('url').value=S.url;$('key').value=S.key;$('code').value='';
   api('stats').then(function(){$('cres').innerHTML='<span class="ok">متصل ✅</span>';pushCfg();go('home');load()}).catch(function(e){$('cres').innerHTML='<span class="bad">'+esc(fmtErr(e))+'</span>'})}
+
+
+var MV='log',QUEUE=[],RULES={};
+function setMV(m){MV=m;['log','q','r'].forEach(function(x){$('m'+x).style.display=x===m?'':'none'});
+  document.querySelectorAll('#mv .chip').forEach(function(b){b.classList.toggle('on',b.dataset.m===m)});
+  if(m==='q')loadQueue();if(m==='r')loadRules()}
+function loadQueue(){$('qlist').innerHTML='<p class="muted">جاري التحميل...</p>';
+  api('queue').then(function(r){QUEUE=r.queue||[];renderQueue()}).catch(function(e){$('qlist').innerHTML='<p class="bad">'+esc(fmtErr(e))+'</p>'})}
+function renderQueue(){
+  $('qlist').innerHTML=QUEUE.length?QUEUE.map(function(r,i){return '<div style="border-bottom:1px solid var(--line);padding:10px 0"><b>'+esc(r.to_phone)+'</b> · '+CH[r.channel]+(r.rule_key?' · '+esc(RULE[r.rule_key]||r.rule_key):'')+
+    '<textarea id="qb'+i+'" rows="3">'+esc(r.body)+'</textarea><button class="btn" onclick="qSave('+i+')">حفظ التعديل</button> <button class="btn red" onclick="qCancel('+i+')">إلغاء الرسالة</button></div>'}).join(''):'<p class="muted">لا توجد رسائل منتظرة الآن.</p>'}
+function qSave(i){post('queue-edit',{id:QUEUE[i].id,body:$('qb'+i).value}).then(function(){toast('تم تعديل الرسالة');loadQueue()}).catch(function(e){toast(fmtErr(e));loadQueue()})}
+function qCancel(i){if(!confirm('إلغاء هذه الرسالة؟ لن تُرسل.'))return;post('queue-edit',{id:QUEUE[i].id,cancel:1}).then(function(){toast('تم الإلغاء');loadQueue()}).catch(function(e){toast(fmtErr(e));loadQueue()})}
+function loadRules(){$('rlist').innerHTML='<p class="muted">جاري التحميل...</p>';
+  api('rules').then(function(r){RULES={};(r.rules||[]).forEach(function(x){RULES[x.key]=x});renderRules()}).catch(function(e){$('rlist').innerHTML='<p class="bad">'+esc(fmtErr(e))+'</p>'})}
+function renderRules(){
+  var keys=Object.keys(RULE);Object.keys(RULES).forEach(function(k){if(keys.indexOf(k)<0)keys.push(k)});
+  $('rlist').innerHTML=keys.map(function(k){var x=RULES[k]||{off:0,text:'',sample:'',vars:[]};
+    return '<details style="border-bottom:1px solid var(--line);padding:8px 0"><summary style="cursor:pointer"><b>'+esc(RULE[k]||k)+'</b> <span class="'+(x.off?'bad':'ok')+'">'+(x.off?'موقوف':'شغّال')+'</span>'+(x.text?' <small class="muted">(نص معدّل)</small>':'')+'</summary>'+
+     (x.sample?'<p class="muted">آخر نص اتبعت: '+esc(x.sample)+'</p>':'<p class="muted">لسه مفيش رسالة من النوع ده اتجهزت.</p>')+
+     (x.vars&&x.vars.length?'<p class="muted">المتغيرات: '+x.vars.map(function(v){return '<code>{'+esc(v)+'}</code>'}).join(' ')+'</p>':'')+
+     '<textarea id="rt_'+esc(k)+'" rows="4" placeholder="سيب فاضي لاستخدام النص الأصلي">'+esc(x.text)+'</textarea>'+
+     '<button class="btn" onclick="ruleSave(\''+k+'\')">حفظ النص</button> <button class="btn alt" onclick="ruleSet(\''+k+'\',{text:\'\'})">رجوع للنص الأصلي</button> <button class="btn '+(x.off?'':'red')+'" onclick="ruleSet(\''+k+'\',{off:'+(x.off?0:1)+'})">'+(x.off?'تشغيل النوع':'إيقاف النوع')+'</button></details>'}).join('')}
+function ruleSave(k){ruleSet(k,{text:$('rt_'+k).value})}
+function ruleSet(k,b){b.key=k;post('rules',b).then(function(){toast('تم الحفظ');loadRules()}).catch(function(e){toast(fmtErr(e))})}
 
 var APK='https://github.com/mostafa0mahmoud9-source/seengeem-hub/releases/latest/download/SeenGeem-Assistant.apk';
 function checkApk(){
