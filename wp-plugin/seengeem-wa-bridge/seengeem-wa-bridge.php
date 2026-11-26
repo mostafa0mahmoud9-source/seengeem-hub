@@ -2,13 +2,13 @@
 /**
  * Plugin Name: SeenGeem WhatsApp Bridge
  * Description: جسر واتساب لمساعد سين جيم: رقمان (طلاب وأولياء أمور / مدرسين ومتابعة)، Cloud API رسمي + بوابة QR احتياطية، طابور رسائل، تتبع التسليم، وواجهة API للتطبيقات.
- * Version: 2.3.0
+ * Version: 2.3.1
  * Author: SeenGeem
  * Text Domain: sgb
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('SGB_VER', '2.3.0');
+define('SGB_VER', '2.3.1');
 define('SGB_OPT', 'sgb_settings');
 
 /* ───────────── الإعدادات ───────────── */
@@ -360,7 +360,7 @@ function sgb_stats() {
     $s = sgb_settings();
     $conn = array();
     foreach ($s['channels'] as $k => $c) { $conn[$k] = array('label' => $c['label'], 'mode' => $c['mode'], 'cloud_ready' => (bool) ($c['phone_number_id'] && $c['token'])); }
-    return array('time' => time(), 'sent_today' => $today, 'by' => $by, 'recent' => $recent, 'incoming' => $inc, 'channels' => $conn, 'quiet_now' => sgb_in_quiet_hours(), 'version' => SGB_VER, 'gw' => get_option('sgb_gw', array()), 'paused' => sgb_paused_info(), 'qr_cap' => sgb_qr_cap());
+    return array('time' => time(), 'sent_today' => $today, 'by' => $by, 'recent' => $recent, 'incoming' => $inc, 'channels' => $conn, 'quiet_now' => sgb_in_quiet_hours(), 'version' => SGB_VER, 'gw' => get_option('sgb_gw', array()), 'paused' => sgb_paused_info(), 'qr_cap' => array('students' => sgb_qr_cap('students'), 'staff' => sgb_qr_cap('staff')));
 }
 
 /* ───────────── صفحة الإعدادات ───────────── */
