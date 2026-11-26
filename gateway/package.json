@@ -1,0 +1,12 @@
+{
+  "name": "seengeem-wa-gateway",
+  "version": "2.0.0",
+  "private": true,
+  "description": "بوابة واتساب QR الاحتياطية لمساعد سين جيم (رقمان)",
+  "main": "index.js",
+  "scripts": { "start": "node index.js" },
+  "dependencies": {
+    "qrcode-terminal": "^0.12.0",
+    "whatsapp-web.js": "^1.26.0"
+  }
+}
