@@ -98,6 +98,17 @@ async function diag(ch, client, exe, err) {
       d.url = pg.url();
       d.title = await pg.title().catch(() => '');
       d.ua = await pg.evaluate(() => navigator.userAgent).catch(() => '');
+      d.probe = await pg.evaluate(() => {
+        const o = {}; const t = (k, f) => { try { o[k] = String(f()).slice(0, 120); } catch (e) { o[k] = 'ERR ' + String(e.message).slice(0, 80); } };
+        t('debugVersion', () => window.Debug && window.Debug.VERSION);
+        t('requireType', () => typeof window.require);
+        t('sockState', () => window.require('WAWebSocketModel').Socket.state);
+        t('connRef', () => !!window.require('WAWebConnModel').Conn.ref);
+        t('wwebjs', () => typeof window.WWebJS);
+        t('store', () => typeof window.Store);
+        t('hasMetaCmd', () => typeof window.require('WAWebCmd'));
+        return o;
+      }).catch(e => ({ err: String(e.message || e) }));
       d.text = await pg.evaluate(() => (document.body && document.body.innerText || '').slice(0, 700)).catch(() => '');
       d.shot = await pg.screenshot({ type: 'jpeg', quality: 40, encoding: 'base64' }).catch(() => '');
     }
