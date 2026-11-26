@@ -92,5 +92,6 @@ const REPO='REPLACE_GITHUB_USER/seengeem-hub',VER='2.0.0';
  const v=(r.tag_name||'').replace(/^v/,'');if(v&&v!==VER){const u=$('upd');u.classList.remove('hide');u.innerHTML='تحديث جديد '+esc(v)+' متاح — <a href="'+esc(r.html_url)+'" target="_blank">تنزيل</a>';}}catch(e){}})();
 load();setInterval(()=>{if(!document.hidden)load()},15000);
 </script>
+<script src="reports.js"></script>
 </body>
 </html>
