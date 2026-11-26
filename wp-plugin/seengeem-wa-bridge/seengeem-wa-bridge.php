@@ -305,7 +305,7 @@ function sgb_store_incoming($channel, $from, $body) {
     $p = sgb_phone($from);
     if (!$p) { return; }
     $wpdb->insert($wpdb->prefix . 'sgb_incoming', array('channel' => $channel === 'staff' ? 'staff' : 'students', 'from_phone' => $p, 'body' => mb_substr(wp_strip_all_tags((string) $body), 0, 1000), 'created' => time()));
-    if (preg_match('/^\s*(stop|إيقاف|ايقاف|الغاء|إلغاء|لا ترسل)\s*$/iu', (string) $body)) { sgb_set_optout($p, true); }
+    if (get_option('sgb_honor_optout', 0) && preg_match('/^\s*(stop|إيقاف|ايقاف|الغاء|إلغاء|لا ترسل)\s*$/iu', (string) $body)) { sgb_set_optout($p, true); }
     if (preg_match('/^\s*(start|اشتراك|تشغيل)\s*$/iu', (string) $body)) { sgb_set_optout($p, false); }
     do_action('sgb_incoming_message', $channel, $p, $body);
 }
