@@ -3,7 +3,7 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      version: { description: 'رقم الإصدار (مثال 2.2.1)', required: true, default: '2.2.1' }
+      version: { description: 'رقم الإصدار (مثال 2.2.1)', required: true, default: '2.3.0' }
   push:
     tags: ['v*']
 permissions:
@@ -29,6 +29,8 @@ jobs:
           npm pkg set "build.publish[0].repo=${GITHUB_REPOSITORY#*/}"
       - run: npm install
         working-directory: desktop
+        env:
+          PUPPETEER_SKIP_DOWNLOAD: 'true'
       - run: npm run dist
         working-directory: desktop
       - uses: actions/upload-artifact@v4
