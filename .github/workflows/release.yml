@@ -27,6 +27,10 @@ jobs:
           npm pkg set version="$V"
           npm pkg set "build.publish[0].owner=${GITHUB_REPOSITORY_OWNER}"
           npm pkg set "build.publish[0].repo=${GITHUB_REPOSITORY#*/}"
+      - name: لوجو المنصة
+        shell: bash
+        run: |
+          curl -fsSL -A "Mozilla/5.0" -o desktop/assets/brand.png "https://seengeem-eg.com/wp-content/plugins/sg-packages/assets/brand/icon-512.png" || echo "تعذر تحميل اللوجو، سيُستخدم الافتراضي"
       - run: npm install
         working-directory: desktop
         env:
@@ -56,6 +60,17 @@ jobs:
           cd mobile
           npm install
           npx cap add android
+          curl -fsSL -A "Mozilla/5.0" -o $RUNNER_TEMP/logo.png "https://seengeem-eg.com/wp-content/plugins/sg-packages/assets/brand/icon-512.png" && {
+            R=android/app/src/main/res
+            IM=$(command -v magick || command -v convert)
+            for spec in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
+              IFS=: read d s f <<< "$spec"; g=$((f*2/3))
+              $IM $RUNNER_TEMP/logo.png -resize ${s}x${s} $R/mipmap-$d/ic_launcher.png
+              $IM $RUNNER_TEMP/logo.png -resize ${s}x${s} $R/mipmap-$d/ic_launcher_round.png
+              $IM $RUNNER_TEMP/logo.png -resize ${g}x${g} -background none -gravity center -extent ${f}x${f} $R/mipmap-$d/ic_launcher_foreground.png
+            done
+            sed -i 's/#FFFFFF/#6a3dc0/I' $R/values/ic_launcher_background.xml
+          } || echo "تعذر تحميل اللوجو، سيُستخدم الافتراضي"
           npx cap sync android
           sed -i "s/versionCode 1/versionCode ${GITHUB_RUN_NUMBER}/; s/versionName \"1.0\"/versionName \"${V}\"/" android/app/build.gradle
           (cd android && ./gradlew assembleRelease)
