@@ -78,6 +78,7 @@ function report(ch) {
 }
 function notify(body) { try { new Notification({ title: 'مساعد سين جيم', body }).show(); } catch (e) { /* ignore */ } }
 
+const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
 const ATT = {}; // عدد محاولات الفشل لكل رقم: نبدّل بين التشغيل المخفي والتشغيل بنافذة مصغّرة خارج الشاشة
 function wlog(m) { try { fs.appendFileSync(path.join(app.getPath('userData'), 'wa-log.txt'), new Date().toISOString() + ' ' + m + '\n'); } catch (e) { /* ignore */ } }
 function pupOpts(ch, exe) {
@@ -98,6 +99,7 @@ async function startChannel(ch) {
   const client = new WW.Client({
     authStrategy: new WW.LocalAuth({ clientId: ch, dataPath: sessDir }),
     puppeteer: pupOpts(ch, exe),
+    userAgent: UA, // الافتراضي في المكتبة قديم (Chrome 101) وواتساب ويب بيرفضه فيفضل بدون تحميل
   });
   RT[ch] = { client, gen };
   setState(ch, { state: 'starting', qr: null, error: '' });
