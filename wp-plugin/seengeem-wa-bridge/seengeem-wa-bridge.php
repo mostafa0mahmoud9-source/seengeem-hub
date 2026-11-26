@@ -2,13 +2,13 @@
 /**
  * Plugin Name: SeenGeem WhatsApp Bridge
  * Description: جسر واتساب لمساعد سين جيم: رقمان (طلاب وأولياء أمور / مدرسين ومتابعة)، Cloud API رسمي + بوابة QR احتياطية، طابور رسائل، تتبع التسليم، وواجهة API للتطبيقات.
- * Version: 2.6.0
+ * Version: 2.6.1
  * Author: SeenGeem
  * Text Domain: sgb
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('SGB_VER', '2.6.0');
+define('SGB_VER', '2.6.1');
 define('SGB_OPT', 'sgb_settings');
 
 /* ───────────── الإعدادات ───────────── */
@@ -235,6 +235,8 @@ function sgb_auth($req) {
     if (current_user_can('manage_options')) { return true; }
     $s = sgb_settings();
     $k = $req->get_header('x-sgb-key');
+    if (!$k) { $k = $req->get_param('_k'); } // للوحة التحكم (المتصفح): بدون هيدر مخصص لتجنب حجب CORS
+    if ($k && $req->get_method() === 'POST' && stripos((string) $req->get_header('content-type'), 'json') === false) { $req->set_header('content-type', 'application/json'); }
     return $s['api_key'] && $k && hash_equals($s['api_key'], $k);
 }
 add_action('rest_api_init', function () {
