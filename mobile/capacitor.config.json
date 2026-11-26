@@ -2,5 +2,5 @@
   "appId": "com.seengeem.assistant",
   "appName": "مساعد سين جيم",
   "webDir": "www",
-  "server": { "androidScheme": "https" }
+  "server": { "androidScheme": "https", "allowNavigation": ["mostafa0mahmoud9-source.github.io"] }
 }
