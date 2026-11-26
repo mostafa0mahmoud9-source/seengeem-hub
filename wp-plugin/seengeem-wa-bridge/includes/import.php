@@ -82,6 +82,11 @@ function sgb_import_run() {
         }
         if (!$ok) { $stats['skipped'][$why] = (isset($stats['skipped'][$why]) ? $stats['skipped'][$why] : 0) + 1; continue; }
         $ctx = json_decode((string) $job['context'], true);
+        $rk = isset($job['rule_key']) ? (string) $job['rule_key'] : '';
+        $rv = is_array($ctx) && isset($ctx['vars']) ? (array) $ctx['vars'] : array();
+        sgb_rules_learn($rk, isset($job['body']) ? html_entity_decode(wp_strip_all_tags((string) $job['body']), ENT_QUOTES, 'UTF-8') : '', $rv);
+        $ro = sgb_rules_get();
+        if (isset($ro[$rk]) && !empty($ro[$rk]['off'])) { $stats['skipped']['rule_off'] = (isset($stats['skipped']['rule_off']) ? $stats['skipped']['rule_off'] : 0) + 1; continue; }
         $args = array('rule' => $job['rule_key'], 'dedupe' => 'sgh:' . $job['dedupe'], 'dedupe_hours' => 720, 'priority' => ((int) $job['priority'] <= 12) ? 1 : 0);
         if (isset($tpl[$job['rule_key']])) {
             $args['template'] = $tpl[$job['rule_key']];
@@ -89,6 +94,7 @@ function sgb_import_run() {
             $args['params'] = array_map(function ($v) { return is_scalar($v) ? (string) $v : ''; }, array_values($vars));
         }
         $body = html_entity_decode(wp_strip_all_tags((string) $job['body']), ENT_QUOTES, 'UTF-8');
+        if (isset($ro[$rk]) && trim((string) $ro[$rk]['text']) !== '') { $body = sgb_render($ro[$rk]['text'], $rv); }
         $r = sgb_enqueue($job['channel'] === 'staff' ? 'staff' : 'students', $c['phone'], $body, $args);
         if (is_wp_error($r)) { $code = $r->get_error_code(); $stats['skipped'][$code] = (isset($stats['skipped'][$code]) ? $stats['skipped'][$code] : 0) + 1; }
         else { $stats['queued']++; }
