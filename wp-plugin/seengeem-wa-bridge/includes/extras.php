@@ -7,14 +7,20 @@ if (!defined('ABSPATH')) { exit; }
 
 /* ───────── حماية الرقم ───────── */
 
-/** الحد اليومي لإرسال QR: يبدأ 40 ويزيد 30 كل يوم حتى الحد العام (تسخين الرقم). */
-function sgb_qr_cap() {
+/** مراحل الحد اليومي لكل خط حسب عمره (أول إرسال ناجح عليه). */
+function sgb_qr_first($ch) {
+    $f = get_option('sgb_qr_first', array());
+    if (!is_array($f)) { $f = array('students' => (int) $f, 'staff' => (int) $f); } // ترحيل من النسخة السابقة
+    return isset($f[$ch]) ? (int) $f[$ch] : 0;
+}
+function sgb_qr_cap($ch = 'students') {
     $s = sgb_settings();
-    if (!get_option('sgb_warmup', 1)) { return (int) $s['daily_cap']; }
-    $first = (int) get_option('sgb_qr_first', 0);
-    if (!$first) { return min(40, (int) $s['daily_cap']); }
-    $days = (int) floor((time() - $first) / 86400);
-    return min((int) $s['daily_cap'], 40 + 30 * $days);
+    $max = (int) $s['daily_cap'];
+    if (!get_option('sgb_warmup', 1)) { return $max; }
+    $first = sgb_qr_first($ch);
+    $days = $first ? (time() - $first) / 86400 : 0;
+    $cap = $days < 7 ? 100 : ($days < 14 ? 200 : ($days < 30 ? 400 : $max));
+    return min($max, $cap);
 }
 
 function sgb_paused_info() {
@@ -34,7 +40,7 @@ function sgb_pull($req) {
     $midnight = (new DateTime('today', wp_timezone()))->getTimestamp();
     $done = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM $t WHERE channel=%s AND ((sent_at>=%d AND status IN ('sent','delivered','read')) OR status='sending')", $ch, $midnight));
-    $left = max(0, sgb_qr_cap() - $done);
+    $left = max(0, sgb_qr_cap($ch) - $done);
     $minp = sgb_in_quiet_hours() ? 1 : 0;
     $rows = $wpdb->get_results($wpdb->prepare(
         "SELECT id,to_phone,body,priority FROM $t WHERE status='qr_pending' AND channel=%s AND priority>=%d AND (priority>=2 OR %d>0) ORDER BY priority DESC, id ASC LIMIT 12", $ch, $minp, $left));
@@ -51,10 +57,18 @@ function sgb_pull($req) {
 function sgb_after_ack($id, $ok, $error) {
     global $wpdb;
     $t = $wpdb->prefix . 'sgb_outbox';
-    if ($ok) { if (!get_option('sgb_qr_first')) { update_option('sgb_qr_first', time(), false); } return; }
-    if (strpos($error, 'غير مسجل') !== false) { return; } // رقم غير موجود على واتساب ليس مؤشر حظر
     $ch = $wpdb->get_var($wpdb->prepare("SELECT channel FROM $t WHERE id=%d", $id));
     if (!$ch) { return; }
+    if ($ok) {
+        if (!sgb_qr_first($ch)) {
+            $f = get_option('sgb_qr_first', array());
+            $f = is_array($f) ? $f : array('students' => (int) $f, 'staff' => (int) $f);
+            $f[$ch] = time();
+            update_option('sgb_qr_first', $f, false);
+        }
+        return;
+    }
+    if (strpos($error, 'غير مسجل') !== false) { return; } // رقم غير موجود على واتساب ليس مؤشر حظر
     $rows = $wpdb->get_col($wpdb->prepare(
         "SELECT status FROM $t WHERE channel=%s AND status IN ('sent','delivered','read','failed') AND (error IS NULL OR error NOT LIKE %s) ORDER BY id DESC LIMIT 20", $ch, '%غير مسجل%'));
     if (count($rows) >= 10) {
@@ -83,7 +97,7 @@ add_action('rest_api_init', function () {
     register_rest_route($ns, '/warmup', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
         $b = (array) $req->get_json_params();
         update_option('sgb_warmup', empty($b['on']) ? 0 : 1, false);
-        return array('ok' => true, 'cap' => sgb_qr_cap());
+        return array('ok' => true, 'cap' => array('students' => sgb_qr_cap('students'), 'staff' => sgb_qr_cap('staff')));
     }));
     register_rest_route($ns, '/digest', array('methods' => 'GET,POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
         $d = array_replace(array('enabled' => 0, 'phone' => ''), (array) get_option('sgb_digest', array()));
