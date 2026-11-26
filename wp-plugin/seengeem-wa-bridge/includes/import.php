@@ -140,8 +140,8 @@ add_action('rest_api_init', function () {
 
 /* صفحة الإعدادات */
 add_action('admin_menu', function () {
-    add_submenu_page('sgb', 'استيراد المساعد', 'استيراد المساعد', 'manage_options', 'sgb-import', 'sgb_import_page');
-});
+    add_submenu_page(sgb_menu_parent(), 'استيراد المساعد', '📥 استيراد المساعد', 'manage_options', 'sgb-import', 'sgb_import_page');
+}, 99);
 function sgb_import_page() {
     if (!current_user_can('manage_options')) { return; }
     $cfg = sgb_imp_settings();
