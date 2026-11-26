@@ -7,7 +7,7 @@
 if (!defined('ABSPATH')) { exit; }
 
 function sgb_tm_defaults() {
-    return array('enabled' => 0, 'send_hour' => 9, 'inactive_days' => 3, 'no_lesson_days' => 7, 'qa_hours' => 24, 'qa_escalate_hours' => 72,
+    return array('enabled' => 0, 'send_hour' => 9, 'inactive_days' => 3, 'monthly_target' => 3, 'cadence_from_day' => 8, 'cadence_msg' => 0, 'qa_hours' => 24, 'qa_escalate_hours' => 72,
         'draft_days' => 3, 'assign_hours' => 48, 'repeat_days' => 2, 'manager_phone' => '', 'follower_phones' => '', 'daily_summary' => 1, 'notify_followers' => 1);
 }
 function sgb_tm_cfg() { return array_replace(sgb_tm_defaults(), (array) get_option('sgb_teach', array())); }
@@ -15,7 +15,7 @@ function sgb_tm_cfg() { return array_replace(sgb_tm_defaults(), (array) get_opti
 function sgb_tm_texts() {
     return array(
         'tch_inactive' => 'أستاذ {name}، لاحظنا إنك ما دخلتش منصة سين جيم من {days} أيام. الطلاب في انتظارك، ادخل النهاردة وتابع كورساتك 🙏',
-        'tch_no_lesson' => 'أستاذ {name}، آخر درس اتضاف على المنصة كان من {days} أيام. محتاجين دروس جديدة للطلاب، ولو في أي عائق قولنا ونساعدك.',
+        'tch_cadence' => 'أستاذ {name}، متابعة الدروس الشهرية: {courses}. محتاجين درس جديد في أقرب وقت عشان الطلاب ما يتأخروش 🙏',
         'tch_qa' => 'أستاذ {name}، عندك {count} سؤال من الطلاب لسه من غير رد (أقدمهم من {hours} ساعة) في: {courses}. ادخل رد عليهم من المنصة 💬',
         'tch_drafts' => 'أستاذ {name}، عندك {count} درس لسه مسودة من أكتر من {days} أيام في: {courses}. انشرها عشان توصل للطلاب.',
         'tch_assign' => 'أستاذ {name}، عندك {count} تسليم واجب لسه ما اتقيّمش (أقدمهم من {hours} ساعة). راجعها من المنصة ✅',
@@ -24,7 +24,7 @@ function sgb_tm_texts() {
     );
 }
 function sgb_tm_labels() {
-    return array('tch_inactive' => 'مدرس: غياب عن المنصة', 'tch_no_lesson' => 'مدرس: تأخر في الدروس', 'tch_qa' => 'مدرس: أسئلة بلا رد',
+    return array('tch_inactive' => 'مدرس: غياب عن المنصة', 'tch_cadence' => 'مدرس: تأخر دروس الشهر', 'tch_qa' => 'مدرس: أسئلة بلا رد',
         'tch_drafts' => 'مدرس: دروس مسودة', 'tch_assign' => 'مدرس: واجبات بلا تقييم', 'mgr_followup' => 'متابع: تنبيه المدرسين', 'mgr_daily' => 'مدير: ملخص يومي');
 }
 /** نص القاعدة بعد تطبيق تعديلات المستخدم (من شاشة الرسائل) وإيقاف النوع إن لزم. */
@@ -81,12 +81,26 @@ function sgb_tm_collect($cfg = null) {
         $roles = (array) $u->roles;
         if (in_array('administrator', $roles, true) && !in_array('sg_teacher', $roles, true)) { continue; }
         $T[$u->ID] = array('uid' => $u->ID, 'name' => $u->display_name, 'phone' => sgb_tm_phone_of($u->ID), 'last_login' => sgb_tm_last_login($u->ID), 'last_lesson' => 0,
-            'courses' => 0, 'drafts' => 0, 'draft_titles' => array(), 'qa' => 0, 'qa_oldest' => 0, 'qa_titles' => array(), 'assign' => 0, 'assign_oldest' => 0);
+            'courses' => 0, 'late_courses' => array(), 'done_month' => 0, 'drafts' => 0, 'draft_titles' => array(), 'qa' => 0, 'qa_oldest' => 0, 'qa_titles' => array(), 'assign' => 0, 'assign_oldest' => 0);
     }
     if (!$T) { return array(); }
     $P = $wpdb->posts; $C = $wpdb->comments;
     foreach ($wpdb->get_results("SELECT post_author, COUNT(*) n FROM $P WHERE post_type='courses' AND post_status='publish' GROUP BY post_author", ARRAY_A) as $r) { if (isset($T[$r['post_author']])) { $T[$r['post_author']]['courses'] = (int) $r['n']; } }
     foreach ($wpdb->get_results("SELECT post_author, MAX(post_date_gmt) d FROM $P WHERE post_type='lesson' AND post_status='publish' GROUP BY post_author", ARRAY_A) as $r) { if (isset($T[$r['post_author']]) && $r['d']) { $T[$r['post_author']]['last_lesson'] = (int) strtotime($r['d'] . ' UTC'); } }
+    // إيقاع الدروس الشهري لكل كورس (نفس منطق «متابعة دروس المدرسين» في المنصة): المطلوب target درس/شهر، والمفروض لحد النهارده بالتناسب
+    $dim = (int) wp_date('t'); $day = (int) wp_date('j');
+    $month_start = wp_date('Y-m-01 00:00:00');
+    $expected = $cfg['monthly_target'] * $day / max(1, $dim);
+    $cnt = array();
+    foreach ($wpdb->get_results($wpdb->prepare("SELECT c.ID cid, COUNT(l.ID) n FROM $P l JOIN $P t ON t.ID=l.post_parent JOIN $P c ON c.ID=t.post_parent
+        WHERE l.post_type='lesson' AND l.post_status='publish' AND l.post_date >= %s AND c.post_type='courses' GROUP BY c.ID", $month_start), ARRAY_A) as $r) { $cnt[(int) $r['cid']] = (int) $r['n']; }
+    foreach ($wpdb->get_results("SELECT ID, post_author, post_title FROM $P WHERE post_type='courses' AND post_status='publish'", ARRAY_A) as $r) {
+        $a = (int) $r['post_author'];
+        if (!isset($T[$a])) { continue; }
+        $n = isset($cnt[(int) $r['ID']]) ? $cnt[(int) $r['ID']] : 0;
+        $T[$a]['done_month'] += $n;
+        if ($day >= (int) $cfg['cadence_from_day'] && $n < $expected) { $T[$a]['late_courses'][] = array('title' => $r['post_title'], 'done' => $n, 'need' => (int) ceil($expected)); }
+    }
     foreach ($wpdb->get_results("SELECT ID, post_author, post_parent FROM $P WHERE post_type='lesson' AND post_status IN ('draft','pending') AND post_modified_gmt < '" . gmdate('Y-m-d H:i:s', $now - $cfg['draft_days'] * 86400) . "'", ARRAY_A) as $r) {
         if (!isset($T[$r['post_author']])) { continue; }
         $T[$r['post_author']]['drafts']++; $T[$r['post_author']]['draft_titles'][] = sgb_tm_course_title($r['ID']);
@@ -117,7 +131,7 @@ function sgb_tm_collect($cfg = null) {
         $T[$uid]['lesson_days'] = $t['last_lesson'] ? (int) floor(($now - $t['last_lesson']) / 86400) : null;
         $flags = array();
         if ($T[$uid]['login_days'] !== null && $T[$uid]['login_days'] >= $cfg['inactive_days']) { $flags[] = 'inactive'; }
-        if ($t['courses'] > 0 && $T[$uid]['lesson_days'] !== null && $T[$uid]['lesson_days'] >= $cfg['no_lesson_days']) { $flags[] = 'no_lesson'; }
+        if ($t['late_courses']) { $flags[] = 'cadence'; }
         if ($t['qa'] > 0) { $flags[] = 'qa'; }
         if ($t['drafts'] > 0) { $flags[] = 'drafts'; }
         if ($t['assign'] > 0) { $flags[] = 'assign'; }
@@ -137,7 +151,7 @@ function sgb_tm_plan($cfg = null) {
         $v = array('name' => $t['name']);
         $items = array();
         if (in_array('inactive', $t['flags'], true)) { $items['tch_inactive'] = $v + array('days' => $t['login_days']); }
-        if (in_array('no_lesson', $t['flags'], true)) { $items['tch_no_lesson'] = $v + array('days' => $t['lesson_days']); }
+        if ($cfg['cadence_msg'] && in_array('cadence', $t['flags'], true)) { $items['tch_cadence'] = $v + array('courses' => sgb_tm_join(array_map(function ($c) { return $c['title'] . ' (' . $c['done'] . '/' . $c['need'] . ')'; }, $t['late_courses']))); }
         if ($t['qa'] > 0) { $items['tch_qa'] = $v + array('count' => $t['qa'], 'hours' => (int) floor($t['qa_oldest'] / 3600), 'courses' => sgb_tm_join($t['qa_titles'])); }
         if ($t['drafts'] > 0) { $items['tch_drafts'] = $v + array('count' => $t['drafts'], 'days' => $cfg['draft_days'], 'courses' => sgb_tm_join($t['draft_titles'])); }
         if ($t['assign'] > 0) { $items['tch_assign'] = $v + array('count' => $t['assign'], 'hours' => (int) floor($t['assign_oldest'] / 3600)); }
@@ -150,7 +164,7 @@ function sgb_tm_plan($cfg = null) {
         }
         $bits = array();
         if ($t['login_days'] !== null && in_array('inactive', $t['flags'], true)) { $bits[] = 'غائب ' . $t['login_days'] . ' يوم'; }
-        if (in_array('no_lesson', $t['flags'], true)) { $bits[] = 'آخر درس من ' . $t['lesson_days'] . ' يوم'; }
+        if ($t['late_courses']) { $bits[] = count($t['late_courses']) . ' كورس متأخر في الدروس'; }
         if ($t['qa'] > 0) { $bits[] = $t['qa'] . ' سؤال بلا رد'; }
         if ($t['drafts'] > 0) { $bits[] = $t['drafts'] . ' مسودة'; }
         if ($t['assign'] > 0) { $bits[] = $t['assign'] . ' واجب بلا تقييم'; }
@@ -214,8 +228,8 @@ add_action('rest_api_init', function () {
     register_rest_route($ns, '/teach-settings', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
         $b = (array) $req->get_json_params();
         $c = sgb_tm_cfg();
-        foreach (array('enabled', 'daily_summary', 'notify_followers') as $k) { if (isset($b[$k])) { $c[$k] = $b[$k] ? 1 : 0; } }
-        foreach (array('send_hour' => array(0, 23), 'inactive_days' => array(1, 60), 'no_lesson_days' => array(1, 90), 'qa_hours' => array(1, 240), 'qa_escalate_hours' => array(1, 720), 'draft_days' => array(1, 60), 'assign_hours' => array(1, 480), 'repeat_days' => array(1, 30)) as $k => $r) {
+        foreach (array('enabled', 'daily_summary', 'notify_followers', 'cadence_msg') as $k) { if (isset($b[$k])) { $c[$k] = $b[$k] ? 1 : 0; } }
+        foreach (array('send_hour' => array(0, 23), 'inactive_days' => array(1, 60), 'monthly_target' => array(1, 30), 'cadence_from_day' => array(1, 28), 'qa_hours' => array(1, 240), 'qa_escalate_hours' => array(1, 720), 'draft_days' => array(1, 60), 'assign_hours' => array(1, 480), 'repeat_days' => array(1, 30)) as $k => $r) {
             if (isset($b[$k])) { $c[$k] = max($r[0], min($r[1], (int) $b[$k])); }
         }
         if (isset($b['manager_phone'])) { $c['manager_phone'] = sgb_phone($b['manager_phone']); }

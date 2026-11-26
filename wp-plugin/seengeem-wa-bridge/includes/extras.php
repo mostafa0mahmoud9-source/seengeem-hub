@@ -88,6 +88,7 @@ add_action('rest_api_init', function () {
         $gw = (array) get_option('sgb_gw', array());
         $gw[$ch] = array('state' => sanitize_key(isset($b['state']) ? $b['state'] : ''), 'phone' => sanitize_text_field(isset($b['phone']) ? $b['phone'] : ''), 'ts' => time());
         update_option('sgb_gw', $gw, false);
+        sgb_qr_store($ch, $gw[$ch]['state'], isset($b['qr']) ? $b['qr'] : '');
         // عمر الخط كما يحدده البرنامج (يضبط مرحلة الحد اليومي)
         if (!empty($b['since']) && (int) $b['since'] > time() - 3650 * 86400 && (int) $b['since'] <= time()) {
             $f = get_option('sgb_qr_first', array());
