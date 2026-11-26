@@ -37,6 +37,7 @@ section{display:none}section.on{display:block}
 .kpi b{display:block;font-size:30px;color:var(--p2)}.kpi span{color:var(--m);font-size:14px}
 .banner{border-radius:16px;padding:14px 16px;margin-bottom:12px;color:#fff;font-weight:600;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
 .banner.ok{background:var(--ok)}.banner.bad{background:var(--bad)}.banner.warn{background:var(--warn)}.banner.info{background:var(--info)}
+.banner a{background:#fff3;color:#fff;border:1px solid #fff8;border-radius:10px;padding:8px 14px;font:inherit;text-decoration:none}
 .banner button{background:#fff3;color:#fff;border:1px solid #fff8;border-radius:10px;padding:8px 14px;font:inherit;cursor:pointer}
 .step{display:flex;gap:12px;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--line)}.step:last-child{border:0}
 .step i{font-style:normal;width:26px;height:26px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex:none;font-size:14px;background:var(--line);color:var(--m)}
@@ -243,17 +244,24 @@ function saveCfg(){var c=parseCode($('code').value);
   lsSet('sgb_url',S.url);lsSet('sgb_key',S.key);$('url').value=S.url;$('key').value=S.key;$('code').value='';
   api('stats').then(function(){$('cres').innerHTML='<span class="ok">متصل ✅</span>';pushCfg();go('home');load()}).catch(function(e){$('cres').innerHTML='<span class="bad">'+esc(fmtErr(e))+'</span>'})}
 
+var APK='https://github.com/mostafa0mahmoud9-source/seengeem-hub/releases/latest/download/SeenGeem-Assistant.apk';
+function checkApk(){
+  var nv=lsGet('sgb_native'),u=$('upd');
+  if(!nv||!/Android/i.test(navigator.userAgent)){u.style.display='none';return}
+  fetch('https://api.github.com/repos/mostafa0mahmoud9-source/seengeem-hub/releases/latest',{cache:'no-store'}).then(function(r){return r.json()}).then(function(r){
+    var v=(r.tag_name||'').replace(/^v/,'');if(!v)return;
+    var a=v.split('.').map(Number),b=nv.split('.').map(Number),newer=false;
+    for(var i=0;i<3;i++){if((a[i]||0)>(b[i]||0)){newer=true;break}if((a[i]||0)<(b[i]||0))break}
+    if(newer){u.style.display='flex';u.innerHTML='<span>🆕 نسخة جديدة من التطبيق ('+esc(v)+')</span><a href="'+APK+'" target="_blank" rel="noopener">تحديث</a>'}
+    else{u.style.display='none'}}).catch(function(){})}
 (function init(){
   $('url').value=S.url;$('key').value=S.key;
   if(window.sgDesktop){window.sgDesktop.onState(function(s){DS=s;if(D)renderHome()});window.sgDesktop.getState().then(function(s){DS=s;if(D)renderHome()})}
   var m=location.hash.match(/setup=([A-Za-z0-9+\/=_-]+)/);
   if(m){var c=parseCode(m[1]);if(c){S.url=c.u;S.key=c.k;lsSet('sgb_url',S.url);lsSet('sgb_key',S.key);$('url').value=S.url;$('key').value=S.key;try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}}}
   document.addEventListener('click',function(){try{if('Notification' in window&&Notification.permission==='default')Notification.requestPermission()}catch(e){}},{once:true});
-  var nv=lsGet('sgb_native');
-  if(nv&&/Android/i.test(navigator.userAgent)){fetch('https://api.github.com/repos/mostafa0mahmoud9-source/seengeem-hub/releases/latest').then(function(r){return r.json()}).then(function(r){
-    var v=(r.tag_name||'').replace(/^v/,''),a=v.split('.').map(Number),b=nv.split('.').map(Number),newer=false;
-    for(var i=0;i<3;i++){if((a[i]||0)>(b[i]||0)){newer=true;break}if((a[i]||0)<(b[i]||0))break}
-    if(newer){var u=$('upd');u.style.display='flex';u.innerHTML='<span>🆕 نسخة جديدة من التطبيق ('+esc(v)+')</span><button onclick="window.open(\''+esc(r.html_url)+'\')">تنزيل</button>'}}).catch(function(){})}
+  checkApk();setInterval(checkApk,30*60*1000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden)checkApk()});
   load();setInterval(function(){if(!document.hidden)load()},15000);
 })();
 </script>
