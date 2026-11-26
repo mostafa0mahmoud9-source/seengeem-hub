@@ -1,4 +1,12 @@
 // يولّد أيقونة التطبيق (PNG 512×512) بدون أي مكتبات خارجية
+// لوجو المنصة: لو الملف assets/brand.png موجود (يُنزَّل وقت البناء) نستخدمه بدل الأيقونة المرسومة
+{
+  const f = require('fs'), pa = require('path'), b = pa.join(__dirname, '..', 'assets', 'brand.png');
+  if (f.existsSync(b) && f.statSync(b).size > 5000) {
+    for (const d of ['build', 'assets']) { f.mkdirSync(pa.join(__dirname, '..', d), { recursive: true }); f.copyFileSync(b, pa.join(__dirname, '..', d, 'icon.png')); }
+    console.log('brand icon used'); process.exit(0);
+  }
+}
 const fs = require('fs'), path = require('path'), zlib = require('zlib');
 const N = 512;
 const crcT = new Int32Array(256).map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
