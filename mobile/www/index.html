@@ -157,7 +157,7 @@ function lsSet(k,v){try{localStorage.setItem(k,v)}catch(e){}}
 var S={url:lsGet('sgb_url'),key:lsGet('sgb_key')},D=null,R=null,ERR=null,F='all',LASTFAIL=-1,DS=null;
 var ST={queued:'بالانتظار',qr_pending:'بانتظار QR',sending:'جاري الإرسال',sent:'أُرسلت',delivered:'وصلت',read:'قُرئت',failed:'فشلت'};
 var CH={students:'طلاب/أولياء أمور',staff:'مدرسين/متابعة'};
-var RULE={tch_inactive:'مدرس: غياب عن المنصة',tch_no_lesson:'مدرس: تأخر في الدروس',tch_qa:'مدرس: أسئلة بلا رد',tch_drafts:'مدرس: دروس مسودة',tch_assign:'مدرس: واجبات بلا تقييم',mgr_followup:'متابع: تنبيه المدرسين',mgr_daily:'مدير: ملخص يومي',success:'تهنئة النجاح',renew_7:'تجديد قبل 7 أيام',renew_2:'تجديد قبل يومين',expired:'انتهاء الاشتراك',winback:'عرض العودة',lead_welcome:'ترحيب بالمسجّل',lead_help:'مساعدة اختيار الاشتراك',lead_offer:'عرض أول اشتراك',inactive:'غياب 3 أيام',unwatched:'درس لم يُبدأ',incomplete:'درس لم يكتمل',quiz_due:'امتحان لم يُحل',low_score:'دعم بعد نتيجة ضعيفة',parent_followup:'متابعة ولي الأمر',weekly:'تقرير أسبوعي',shoot_24:'تذكير تصوير (24 ساعة)',shoot_2:'تذكير تصوير (ساعتين)',teacher_late:'متابعة تأخير التصوير',motivation:'تشجيع أسبوعي',manager_digest:'ملخص الإدارة',manual:'يدوي / تجربة'};
+var RULE={tch_inactive:'مدرس: غياب عن المنصة',tch_cadence:'مدرس: تأخر دروس الشهر',tch_qa:'مدرس: أسئلة بلا رد',tch_drafts:'مدرس: دروس مسودة',tch_assign:'مدرس: واجبات بلا تقييم',mgr_followup:'متابع: تنبيه المدرسين',mgr_daily:'مدير: ملخص يومي',success:'تهنئة النجاح',renew_7:'تجديد قبل 7 أيام',renew_2:'تجديد قبل يومين',expired:'انتهاء الاشتراك',winback:'عرض العودة',lead_welcome:'ترحيب بالمسجّل',lead_help:'مساعدة اختيار الاشتراك',lead_offer:'عرض أول اشتراك',inactive:'غياب 3 أيام',unwatched:'درس لم يُبدأ',incomplete:'درس لم يكتمل',quiz_due:'امتحان لم يُحل',low_score:'دعم بعد نتيجة ضعيفة',parent_followup:'متابعة ولي الأمر',weekly:'تقرير أسبوعي',shoot_24:'تذكير تصوير (24 ساعة)',shoot_2:'تذكير تصوير (ساعتين)',teacher_late:'متابعة تأخير التصوير',motivation:'تشجيع أسبوعي',manager_digest:'ملخص الإدارة',manual:'يدوي / تجربة'};
 var REASON={rule_off:'نوع موقوف',no_consent:'بدون موافقة مسجّلة',opted_out:'طلب الإيقاف',paused:'موقوف مؤقتًا',not_due:'لم يحن موعده (بيتبعت في وقته)',no_phone:'بدون رقم',bad_phone:'رقم غير صالح',contact_cap:'تجاوز حد الرقم اليومي',status:'حالة غير مؤهلة',no_contact:'جهة غير معروفة',no_marketing:'رسالة عروض بدون موافقة تسويق',empty:'نص فارغ',duplicate:'مكررة (اتبعتت قبل كده)',optout:'إيقاف'};
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';setTimeout(function(){t.style.display='none'},2600)}
@@ -298,14 +298,14 @@ function ruleSave(k){ruleSet(k,{text:$('rt_'+k).value})}
 function ruleSet(k,b){b.key=k;post('rules',b).then(function(){toast('تم الحفظ');loadRules()}).catch(function(e){toast(fmtErr(e))})}
 
 var TC=null;
-var TSPEC=[['inactive_days','غياب المدرس عن المنصة (أيام)'],['no_lesson_days','تأخر نزول درس جديد (أيام)'],['qa_hours','سؤال طالب بلا رد (ساعات)'],['qa_escalate_hours','تصعيد للمتابع بعد (ساعات)'],['draft_days','درس مسودة أكثر من (أيام)'],['assign_hours','واجب بلا تقييم (ساعات)'],['repeat_days','أقل مدة بين تنبيهين متشابهين (أيام)'],['send_hour','ساعة الإرسال اليومي (0-23)']];
+var TSPEC=[['inactive_days','غياب المدرس عن المنصة (أيام)'],['monthly_target','المطلوب من الدروس لكل كورس شهريًا'],['cadence_from_day','نبدأ نعتبر الكورس متأخر من يوم (في الشهر)'],['qa_hours','سؤال طالب بلا رد (ساعات)'],['qa_escalate_hours','تصعيد للمتابع بعد (ساعات)'],['draft_days','درس مسودة أكثر من (أيام)'],['assign_hours','واجب بلا تقييم (ساعات)'],['repeat_days','أقل مدة بين تنبيهين متشابهين (أيام)'],['send_hour','ساعة الإرسال اليومي (0-23)']];
 function loadTeach(){api('teach').then(function(r){TC=r;renderTeach()}).catch(function(e){$('tlist').innerHTML='<p class="bad">'+esc(fmtErr(e))+'</p>'})}
 function dTxt(d,ok){return d===null||d===undefined?'—':(d===0?'اليوم':d+' يوم')}
 function renderTeach(){if(!TC)return;var c=TC.cfg;
   $('tstat').innerHTML='<div class="row"><span><b>الإرسال التلقائي اليومي</b><br><small class="muted">'+(c.enabled?'شغّال: يبعت كل يوم الساعة '+c.send_hour+' صباحًا':'متوقف — راجع المعاينة تحت وبعدين شغّله')+'</small></span><button class="btn '+(c.enabled?'red':'')+'" onclick="teachSet({enabled:'+(c.enabled?0:1)+'})">'+(c.enabled?'إيقاف':'تشغيل')+'</button></div>'+(TC.last_run?'<p class="muted">آخر تشغيل تلقائي: '+esc(TC.last_run)+'</p>':'');
   $('tlist').innerHTML=TC.teachers.length?TC.teachers.map(function(t){var bad=t.flags.length;
     return '<div style="border-bottom:1px solid var(--line);padding:10px 0"><div class="row" style="border:0;padding:0"><b>'+esc(t.name)+'</b><span class="'+(bad?'bad':'ok')+'">'+(bad?'يحتاج متابعة':'منتظم ✔')+'</span></div>'+
-     '<div class="muted">آخر دخول: '+dTxt(t.login_days)+' | آخر درس: '+dTxt(t.lesson_days)+' | كورسات: '+t.courses+'</div>'+
+     '<div class="muted">آخر دخول: '+dTxt(t.login_days)+' | آخر درس: '+dTxt(t.lesson_days)+' | كورسات: '+t.courses+' | دروس الشهر: '+t.done_month+'</div>'+(t.late_courses&&t.late_courses.length?'<div class="bad" style="font-size:13px">كورسات متأخرة: '+t.late_courses.map(function(c){return esc(c.title)+' ('+c.done+'/'+c.need+')'}).join('، ')+'</div>':'')+
      '<div class="muted">أسئلة بلا رد: <b>'+t.qa+'</b> | واجبات بلا تقييم: <b>'+t.assign+'</b> | مسودات: <b>'+t.drafts+'</b></div>'+
      (t.phone?'<div class="muted">📱 '+esc(t.phone)+'</div>':'<div style="display:flex;gap:6px"><input id="tp'+t.uid+'" inputmode="tel" placeholder="رقم واتساب المدرس" style="margin:4px 0"><button class="btn" onclick="teachPhone('+t.uid+')">حفظ</button></div>')+
      (bad&&t.phone?'<button class="btn alt" onclick="teachRun('+t.uid+')">تنبيه هذا المدرس الآن</button>':'')+'</div>'}).join(''):'<p class="muted">لا يوجد مدرسون.</p>';
@@ -314,6 +314,7 @@ function renderTeach(){if(!TC)return;var c=TC.cfg;
    '<label>رقم مدير المنصة (واتساب)</label><input id="tc_manager_phone" inputmode="tel" value="'+esc(c.manager_phone)+'" placeholder="مثال 01xxxxxxxxx">'+
    '<label>أرقام المتابعين (مفصولة بفاصلة)</label><input id="tc_follower_phones" value="'+esc(c.follower_phones)+'" placeholder="01xxxxxxxxx, 01xxxxxxxxx">'+
    '<div class="row"><span>ملخص يومي للمدير</span><button class="btn alt" onclick="teachSet({daily_summary:'+(c.daily_summary?0:1)+'})">'+(c.daily_summary?'مفعّل ✔':'متوقف')+'</button></div>'+
+   '<div class="row"><span>رسالة للمدرس عن تأخر دروس الشهر<br><small class="muted">المنصة بتبعت تذكير السبت أصلًا، فالأفضل تفضل متوقفة</small></span><button class="btn alt" onclick="teachSet({cadence_msg:'+(c.cadence_msg?0:1)+'})">'+(c.cadence_msg?'مفعّل ✔':'متوقف')+'</button></div>'+
    '<div class="row"><span>تنبيه المتابعين بالحالات الحرجة</span><button class="btn alt" onclick="teachSet({notify_followers:'+(c.notify_followers?0:1)+'})">'+(c.notify_followers?'مفعّل ✔':'متوقف')+'</button></div>'+
    '<button class="btn" onclick="teachSave()">حفظ الإعدادات</button>'+
    '<p class="muted">لتعديل نص أي رسالة: «الرسائل» ثم «أنواع الرسائل».</p>'+
@@ -336,6 +337,8 @@ function checkApk(){
 (function init(){
   $('url').value=S.url;$('key').value=S.key;
   try{var nv0=lsGet('sgb_native');if(nv0)$('ver').textContent='v'+nv0+(window.sgDesktop?' · كمبيوتر':' · موبايل')}catch(e){}
+  function applySetup(code){var c=parseCode(code);if(c){S.url=c.u;S.key=c.k;lsSet('sgb_url',S.url);lsSet('sgb_key',S.key);$('url').value=S.url;$('key').value=S.key;toast('تم ربط البرنامج بالموقع ✅');pushCfg();load()}}
+  if(window.sgDesktop&&window.sgDesktop.getSetup){window.sgDesktop.onSetup(applySetup);window.sgDesktop.getSetup().then(function(c){if(c)applySetup(c)})}
   if(window.sgDesktop){window.sgDesktop.onState(function(s){DS=s;renderHome()});window.sgDesktop.getState().then(function(s){DS=s;renderHome()})}
   var m=location.hash.match(/setup=([A-Za-z0-9+\/=_-]+)/);
   if(m){var c=parseCode(m[1]);if(c){S.url=c.u;S.key=c.k;lsSet('sgb_url',S.url);lsSet('sgb_key',S.key);$('url').value=S.url;$('key').value=S.key;try{history.replaceState(null,'',location.pathname+location.search)}catch(e){}}}
