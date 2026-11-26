@@ -27,6 +27,16 @@ add_action('rest_api_init', function () {
         }
         return array('channels' => $out, 'online' => $online);
     }));
+    register_rest_route($ns, '/diag', array(
+        array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
+            $b = $req->get_json_params(); if (!is_array($b)) { $b = array(); }
+            $ch = isset($b['ch']) && $b['ch'] === 'staff' ? 'staff' : 'students';
+            if (isset($b['shot']) && strlen($b['shot']) > 180000) { $b['shot'] = ''; }
+            $d = (array) get_option('sgb_diag', array()); $d[$ch] = $b; update_option('sgb_diag', $d, false);
+            return array('ok' => true);
+        }),
+        array('methods' => 'GET', 'permission_callback' => 'sgb_auth', 'callback' => function () { return (array) get_option('sgb_diag', array()); }),
+    ));
     register_rest_route($ns, '/qr-cmd', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
         $ch = $req->get_param('channel') === 'staff' ? 'staff' : 'students';
         $cmd = $req->get_param('cmd');
