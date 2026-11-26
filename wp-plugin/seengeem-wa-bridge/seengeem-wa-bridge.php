@@ -364,9 +364,18 @@ function sgb_stats() {
 }
 
 /* ───────────── صفحة الإعدادات ───────────── */
+/** القائمة الأب: «مساعد سين جيم» لو موجود، وإلا قائمة مستقلة. */
+function sgb_menu_parent() {
+    global $admin_page_hooks;
+    return (isset($admin_page_hooks['sgh-assistant'])) ? 'sgh-assistant' : 'sgb';
+}
 add_action('admin_menu', function () {
-    add_menu_page('واتساب المساعد', 'واتساب المساعد', 'manage_options', 'sgb', 'sgb_page', 'dashicons-format-chat', 58);
-});
+    if (sgb_menu_parent() === 'sgh-assistant') {
+        add_submenu_page('sgh-assistant', 'ربط الواتساب', '💬 ربط الواتساب', 'manage_options', 'sgb', 'sgb_page');
+    } else {
+        add_menu_page('ربط الواتساب', 'ربط الواتساب', 'manage_options', 'sgb', 'sgb_page', 'dashicons-format-chat', 58);
+    }
+}, 99);
 function sgb_page() {
     if (!current_user_can('manage_options')) { return; }
     $msg = '';
@@ -388,7 +397,16 @@ function sgb_page() {
     }
     $s = sgb_settings();
     $hook = esc_url(rest_url('sgb/v1/webhook'));
-    echo '<div class="wrap" dir="rtl"><h1>واتساب مساعد سين جيم</h1>';
+    echo '<div class="wrap" dir="rtl"><h1>ربط واتساب — مساعد سين جيم</h1>';
+    $gw = get_option('sgb_gw', array());
+    $lbl = array('students' => 'رقم الطلاب وأولياء الأمور', 'staff' => 'رقم المدرسين والمتابعة');
+    echo '<div class="notice notice-info" style="padding:12px 16px"><p><b>ربط الواتساب بالـ QR بيتم من «برنامج مساعد سين جيم» على الكمبيوتر</b> (مش من هنا): افتح البرنامج ← الصفحة الرئيسية ← أرقام الواتساب ← امسح الكود بواتساب كل رقم.</p><ul style="margin:6px 18px">';
+    foreach ($lbl as $k => $name) {
+        $g = isset($gw[$k]) ? $gw[$k] : array();
+        $ok = !empty($g['state']) && $g['state'] === 'ready' && !empty($g['ts']) && (time() - (int) $g['ts']) < 240;
+        echo '<li>' . esc_html($name) . ': ' . ($ok ? '<b style="color:#0a7d33">متصل ✔</b>' . (!empty($g['phone']) ? ' (' . esc_html($g['phone']) . ')' : '') : '<b style="color:#b32d2e">غير مربوط</b>') . '</li>';
+    }
+    echo '</ul><p><a class="button button-primary" href="https://github.com/mostafa0mahmoud9-source/seengeem-hub/releases/latest" target="_blank" rel="noopener">تحميل البرنامج والتطبيق</a></p></div>';
     if ($msg) { echo '<div class="notice notice-success"><p>' . esc_html($msg) . '</p></div>'; }
     echo '<form method="post">'; wp_nonce_field('sgb_save');
     foreach ($s['channels'] as $k => $c) {
