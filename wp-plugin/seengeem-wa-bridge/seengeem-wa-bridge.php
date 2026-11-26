@@ -416,3 +416,4 @@ function sgb_page() {
     echo '<tr><th>مفتاح التطبيقات / البوابة (X-SGB-Key)</th><td><code>' . esc_html($s['api_key']) . '</code> — ضعه في تطبيق الكمبيوتر والموبايل وفي بوابة QR.</td></tr>';
     echo '<tr><th>ربطها بالقواعد الحالية</th><td><code>do_action(\'sgb_enqueue\', \'students\', $phone, $text, array(\'rule\' =&gt; \'renew_7\', \'dedupe\' =&gt; \'renew_7:\'.$id));</code></td></tr></table></div>';
 }
+require_once __DIR__ . '/includes/import.php';
