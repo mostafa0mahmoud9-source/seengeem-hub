@@ -1,9 +1,9 @@
 name: Release
-# تشغيل: من تبويب Actions اضغط Run workflow، أو أنشئ Release جديد باسم tag مثل v2.0.1
+# تشغيل: من تبويب Actions اضغط Run workflow، أو أنشئ Release جديد باسم tag مثل v2.2.1
 on:
   workflow_dispatch:
     inputs:
-      version: { description: 'رقم الإصدار (مثال 2.0.1)', required: true, default: '2.0.1' }
+      version: { description: 'رقم الإصدار (مثال 2.2.1)', required: true, default: '2.2.1' }
   push:
     tags: ['v*']
 permissions:
@@ -22,7 +22,7 @@ jobs:
         shell: bash
         run: |
           V="${VER#v}"
-          sed -i "s#REPLACE_GITHUB_USER/seengeem-hub#${GITHUB_REPOSITORY}#; s#VER='2.0.0'#VER='${V}'#" mobile/www/index.html
+          sed -i "s#NATIVE_VER='0.0.0'#NATIVE_VER='${V}'#" mobile/www/index.html
           cd desktop
           npm pkg set version="$V"
           npm pkg set "build.publish[0].owner=${GITHUB_REPOSITORY_OWNER}"
@@ -50,7 +50,7 @@ jobs:
       - name: بناء وتوقيع الـ APK
         run: |
           V="${VER#v}"
-          sed -i "s#REPLACE_GITHUB_USER/seengeem-hub#${GITHUB_REPOSITORY}#; s#VER='2.0.0'#VER='${V}'#" mobile/www/index.html
+          sed -i "s#NATIVE_VER='0.0.0'#NATIVE_VER='${V}'#" mobile/www/index.html
           cd mobile
           npm install
           npx cap add android
