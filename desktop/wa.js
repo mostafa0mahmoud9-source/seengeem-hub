@@ -79,7 +79,7 @@ function report(ch) {
 function notify(body) { try { new Notification({ title: 'مساعد سين جيم', body }).show(); } catch (e) { /* ignore */ } }
 
 async function startChannel(ch) {
-  if (cfg.channels[ch] === false || !cfg.site || !cfg.key) return;
+  if (cfg.channels[ch] === false) return;
   if (RT[ch] && RT[ch].client) return;
   if (!WW) { try { WW = require('whatsapp-web.js'); } catch (e) { setState(ch, { state: 'error', error: 'مكتبة واتساب غير مثبتة' }); return; } }
   if (!QRCode) { try { QRCode = require('qrcode'); } catch (e) { /* بدون QR صورة */ } }
@@ -177,7 +177,7 @@ function init(opts) {
   load();
   CHANNELS.forEach(ch => { S[ch] = { state: 'idle', qr: null, phone: '', error: '' }; });
   started = true;
-  if (cfg.site && cfg.key) CHANNELS.forEach((ch, i) => setTimeout(() => startChannel(ch), 3000 + i * 6000));
+  CHANNELS.forEach((ch, i) => setTimeout(() => startChannel(ch), 3000 + i * 6000)); // الـ QR يظهر حتى قبل ربط الموقع
   setInterval(() => CHANNELS.forEach(ch => { if (S[ch] && S[ch].state !== 'idle') report(ch); }), 60000);
 }
 
@@ -187,7 +187,7 @@ async function setConfig(c) {
   cfg.site = c.site.trim(); cfg.key = c.key.trim();
   if (c.channels) cfg.channels = Object.assign(cfg.channels, c.channels);
   save();
-  if (started && changed) CHANNELS.forEach((ch, i) => setTimeout(() => startChannel(ch), 500 + i * 6000));
+  if (started && changed) CHANNELS.forEach((ch, i) => { if (!RT[ch] || !RT[ch].client) setTimeout(() => startChannel(ch), 500 + i * 6000); else report(ch); });
   return getState();
 }
 async function connect(ch) {
