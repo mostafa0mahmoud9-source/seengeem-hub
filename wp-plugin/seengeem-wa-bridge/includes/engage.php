@@ -9,6 +9,10 @@
  */
 if (!defined('ABSPATH')) { exit; }
 
+/* المنطقة الزمنية: القاهرة دائمًا (بغض النظر عن توقيت الموقع) */
+function sgb_eng_tz() { return new DateTimeZone('Africa/Cairo'); }
+function sgb_eng_d($f, $ts = null) { return wp_date($f, $ts, sgb_eng_tz()); }
+
 /* ───────── الإعدادات ───────── */
 function sgb_eng_defaults() {
     return array(
@@ -104,7 +108,7 @@ function sgb_eng_occ_for($ymd) {
 function sgb_eng_upcoming($days = 60) {
     $out = array();
     $all = sgb_eng_occasions();
-    $t = strtotime(wp_date('Y-m-d') . ' UTC');
+    $t = strtotime(sgb_eng_d('Y-m-d') . ' UTC');
     for ($i = 0; $i <= $days; $i++) {
         $ymd = gmdate('Y-m-d', $t + $i * 86400);
         foreach (sgb_eng_occ_for($ymd) as $k) { $out[] = array('date' => $ymd, 'key' => $k, 'name' => $all[$k][0]); }
@@ -134,7 +138,7 @@ function sgb_eng_refresh_occ($force = false) {
     $last = (int) get_option('sgb_eng_occ_ts', 0);
     if (!$force && time() - $last < 7 * 86400) { return; }
     update_option('sgb_eng_occ_ts', time(), false);
-    $y0 = (int) wp_date('Y'); $found = array(); $status = 'ok'; $n = 0;
+    $y0 = (int) sgb_eng_d('Y'); $found = array(); $status = 'ok'; $n = 0;
     foreach (array($y0, $y0 + 1) as $yy) {
         $r = wp_remote_get('https://date.nager.at/api/v3/PublicHolidays/' . $yy . '/EG', array('timeout' => 12));
         if (is_wp_error($r) || wp_remote_retrieve_response_code($r) !== 200) { $status = is_wp_error($r) ? $r->get_error_message() : 'HTTP ' . wp_remote_retrieve_response_code($r); continue; }
@@ -251,7 +255,7 @@ function sgb_eng_send_lib($cat, $r, $extra = array(), $override_body = null, $ta
         if ($res->get_error_code() !== 'duplicate') { return $res; }
     }
     // استنفدنا التركيبات الجديدة لهذا الرقم: نسمح بتكرار بعيد بدل التوقف
-    return sgb_enqueue($r['ch'], $r['phone'], $last, array('rule' => $rule, 'dedupe' => 'eng:re:' . $cat . ':' . $r['phone'] . ':' . wp_date('Ymd'), 'dedupe_hours' => 20, 'priority' => -10));
+    return sgb_enqueue($r['ch'], $r['phone'], $last, array('rule' => $rule, 'dedupe' => 'eng:re:' . $cat . ':' . $r['phone'] . ':' . sgb_eng_d('Ymd'), 'dedupe_hours' => 20, 'priority' => -10));
 }
 function sgb_eng_support_cat($uid) {
     $ll = $uid ? sgb_tm_last_login($uid) : 0;
@@ -285,7 +289,8 @@ function sgb_eng_create_job($job) {
 }
 function sgb_eng_process_jobs() {
     $jobs = sgb_eng_jobs();
-    if (!$jobs || sgb_in_quiet_hours()) { return; }
+    $hh = (int) sgb_eng_d('G');
+    if (!$jobs || $hh < 8 || $hh >= 23) { return; }
     $changed = false; $budget = 30;
     foreach ($jobs as $id => &$j) {
         if ($budget <= 0) { break; }
@@ -336,7 +341,7 @@ function sgb_eng_birth_of($uid, $parent = false) {
 }
 function sgb_eng_auto() {
     $c = sgb_eng_cfg();
-    $today = wp_date('Y-m-d'); $hour = (int) wp_date('G'); $dow = (int) wp_date('w');
+    $today = sgb_eng_d('Y-m-d'); $hour = (int) sgb_eng_d('G'); $dow = (int) sgb_eng_d('w');
     $done = (array) get_option('sgb_eng_done', array());
     $mark = function ($k) use (&$done) { $done[$k] = time(); update_option('sgb_eng_done', $done, false); };
     $ready = function ($k, $h, $span = 6) use (&$done, $hour, $today) { return empty($done[$k . ':' . $today]) && $hour >= $h && $hour < $h + $span; };
@@ -367,7 +372,7 @@ function sgb_eng_auto() {
     }
     if (!empty($c['bday_on']) && $ready('bday', (int) $c['bday_hour'])) {
         $mark('bday:' . $today);
-        $md = wp_date('m-d'); $s = array(); $p = array();
+        $md = sgb_eng_d('m-d'); $s = array(); $p = array();
         foreach (sgb_eng_recipients(array('students', 'parents')) as $r) {
             if ($r['aud'] === 'students' && sgb_eng_birth_of($r['uid']) === $md) { $s[] = $r; }
             if ($r['aud'] === 'parents' && sgb_eng_birth_of($r['uid'], true) === $md) { $p[] = $r; }
@@ -387,9 +392,9 @@ add_action('sgb_cron', function () {
 /* ───────── تقرير المدير اليومي ───────── */
 function sgb_eng_report_text() {
     global $wpdb;
-    $dt = new DateTime(wp_date('Y-m-d') . ' 00:00:00', wp_timezone());
+    $dt = new DateTime(sgb_eng_d('Y-m-d') . ' 00:00:00', sgb_eng_tz());
     $t0 = $dt->getTimestamp();
-    $sql0 = wp_date('Y-m-d H:i:s', $t0);
+    $sql0 = sgb_eng_d('Y-m-d H:i:s', $t0);
     $new = count(get_users(array('role__in' => array('subscriber', 'customer'), 'fields' => 'ID', 'date_query' => array(array('after' => $sql0, 'inclusive' => true)))));
     $act = array();
     foreach (array('sgb_last_login', 'wc_last_active') as $mk) {
@@ -407,7 +412,7 @@ function sgb_eng_report_text() {
     $inc = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM {$wpdb->prefix}sgb_incoming WHERE created>=%d", $t0));
     $ch = function ($k) { return sgb_desktop_alive($k) ? 'متصل ✅' : 'غير متصل ⚠️'; };
     $js = function_exists('sgb_jr_stats') ? sgb_jr_stats() : array();
-    $lines = array('📊 تقرير سين جيم — ' . wp_date('j/n/Y'));
+    $lines = array('📊 تقرير سين جيم — ' . sgb_eng_d('j/n/Y'));
     $lines[] = '👤 طلاب جدد اليوم: ' . $new;
     $lines[] = '🟢 طلاب دخلوا المنصة اليوم: ' . count($act);
     $lines[] = '🛒 اشتراكات/طلبات اليوم: ' . max($orders, $enr) . ($rev > 0 ? ' (إجمالي ' . round($rev) . ' ج)' : '');
@@ -423,7 +428,7 @@ function sgb_eng_send_report($test = false) {
     $c = sgb_eng_cfg();
     $p = sgb_phone($c['report_phone']);
     if (!$p) { return new WP_Error('nophone', 'رقم المدير غير صالح'); }
-    return sgb_enqueue('staff', $p, sgb_eng_report_text(), array('rule' => 'eng_report', 'dedupe' => $test ? null : 'eng:report:' . wp_date('Ymd'), 'dedupe_hours' => 20, 'priority' => 5));
+    return sgb_enqueue('staff', $p, sgb_eng_report_text(), array('rule' => 'eng_report', 'dedupe' => $test ? null : 'eng:report:' . sgb_eng_d('Ymd'), 'dedupe_hours' => 20, 'priority' => 5));
 }
 
 /* ───────── حقول تاريخ الميلاد في ملف المستخدم ───────── */
@@ -535,7 +540,7 @@ function sgb_eng_page() {
             }
         } else {
             $ts = time();
-            if (!empty($_POST['when'])) { try { $d = new DateTime(sanitize_text_field($_POST['when']), wp_timezone()); $ts = max(time(), $d->getTimestamp()); } catch (Exception $e) { $ts = time(); } }
+            if (!empty($_POST['when'])) { try { $d = new DateTime(sanitize_text_field($_POST['when']), sgb_eng_tz()); $ts = max(time(), $d->getTimestamp()); } catch (Exception $e) { $ts = time(); } }
             if (!$recips) { $msg = 'لا يوجد مستلمون بهذه الاختيارات.'; }
             else { sgb_eng_create_job(array('kind' => 'manual', 'text' => $text, 'label' => 'رسالة يدوية', 'ts' => $ts, 'recips' => $recips)); $msg = 'تم إنشاء الإرسال لعدد ' . count($recips) . ' مستلم ✅ (يُرسل على دفعات صغيرة).'; $draft = ''; }
         }
@@ -614,7 +619,7 @@ function sgb_eng_page() {
     if (!$up) { echo '<tr><td>لا مناسبات قريبة.</td></tr>'; }
     foreach ($up as $o) { echo '<tr><td>' . esc_html($o['date']) . '</td><td>' . esc_html($o['name']) . '</td><td><code>' . esc_html($o['key']) . '</code></td></tr>'; }
     $w = (array) get_option('sgb_eng_web', array());
-    echo '</tbody></table><p style="color:#666">التواريخ الهجرية تُحسب تلقائيًا ويبحث السيرفر عنها في الإنترنت كل أسبوع. ' . (!empty($w['ts']) ? 'آخر بحث: ' . esc_html(wp_date('j/n H:i', $w['ts'])) . ' — ' . esc_html($w['status']) . ' (' . (int) $w['count'] . ' عطلة رسمية، تعديلات: ' . count((array) $w['force']) . ')' : 'لم يتم البحث بعد.') . ' قد يختلف يوم حسب رؤية الهلال، فصحّحه يدويًا هنا.</p>';
+    echo '</tbody></table><p style="color:#666">التواريخ الهجرية تُحسب تلقائيًا ويبحث السيرفر عنها في الإنترنت كل أسبوع. ' . (!empty($w['ts']) ? 'آخر بحث: ' . esc_html(sgb_eng_d('j/n H:i', $w['ts'])) . ' — ' . esc_html($w['status']) . ' (' . (int) $w['count'] . ' عطلة رسمية، تعديلات: ' . count((array) $w['force']) . ')' : 'لم يتم البحث بعد.') . ' قد يختلف يوم حسب رؤية الهلال، فصحّحه يدويًا هنا.</p>';
     echo '<form method="post">'; wp_nonce_field('sgb_eng_occ');
     echo '<p><b>تصحيح تاريخ مناسبة</b> (سطر لكل مناسبة: <code>2027-03-10|eid_fitr</code>):<br><textarea name="force" rows="3" style="width:100%;max-width:560px">' . esc_textarea((string) get_option('sgb_eng_force', '')) . '</textarea></p>';
     $cu = ''; foreach ((array) get_option('sgb_eng_custom_occ', array()) as $x) { $cu .= $x['date'] . '|' . $x['name'] . (!empty($x['wish']) ? '|' . $x['wish'] : '') . "\n"; }
@@ -629,7 +634,7 @@ function sgb_eng_page() {
     if (!$jobs) { echo '<tr><td colspan="6">لا توجد إرسالات بعد.</td></tr>'; }
     $stl = array('wait' => 'بانتظار الموعد', 'run' => 'جارٍ', 'done' => 'انتهى', 'cancel' => 'أُلغي');
     foreach ($jobs as $j) {
-        echo '<tr><td>' . esc_html($j['label']) . '<br><small>' . esc_html(wp_date('j/n H:i', $j['created'])) . '</small></td><td>' . esc_html($stl[$j['status']]) . '</td><td>' . (int) $j['sent'] . '</td><td>' . (int) $j['skipped'] . '</td><td>' . count($j['recips']) . '</td><td>';
+        echo '<tr><td>' . esc_html($j['label']) . '<br><small>' . esc_html(sgb_eng_d('j/n H:i', $j['created'])) . '</small></td><td>' . esc_html($stl[$j['status']]) . '</td><td>' . (int) $j['sent'] . '</td><td>' . (int) $j['skipped'] . '</td><td>' . count($j['recips']) . '</td><td>';
         if (in_array($j['status'], array('wait', 'run'), true)) { echo '<form method="post">'; wp_nonce_field('sgb_eng_cancel'); echo '<button class="button" name="sgb_eng_cancel" value="' . esc_attr($j['id']) . '">إلغاء</button></form>'; }
         echo '</td></tr>';
     }
