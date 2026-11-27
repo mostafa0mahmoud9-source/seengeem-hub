@@ -21,15 +21,15 @@ function sgb_eng_defaults() {
         'weekend_on' => 0, 'weekend_hour' => 11, 'weekend_days' => array(5),
         'support_on' => 0, 'support_hour' => 16, 'support_days' => array(0, 2, 4),
         'tips_on' => 0, 'tips_hour' => 18, 'tips_days' => array(0, 1, 2, 3, 4, 5, 6),
-        'bday_on' => 0, 'bday_hour' => 10,
+        'bday_on' => 0, 'bday_hour' => 10, 'bdform_on' => 1, 'bdform_hour' => 15,
         'teach_on' => 1, 'teach_hour' => 12, 'teach_days' => array(0, 3),
     );
 }
 function sgb_eng_cfg() { return array_replace(sgb_eng_defaults(), (array) get_option('sgb_eng', array())); }
 function sgb_eng_save_cfg($b) {
     $c = sgb_eng_cfg();
-    foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on', 'teach_on') as $k) { if (isset($b[$k])) { $c[$k] = $b[$k] ? 1 : 0; } }
-    foreach (array('report_hour' => array(0, 23), 'occ_hour' => array(6, 20), 'weekend_hour' => array(6, 20), 'support_hour' => array(6, 20), 'tips_hour' => array(6, 20), 'bday_hour' => array(6, 20), 'teach_hour' => array(6, 20)) as $k => $r) {
+    foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on', 'teach_on', 'bdform_on') as $k) { if (isset($b[$k])) { $c[$k] = $b[$k] ? 1 : 0; } }
+    foreach (array('report_hour' => array(0, 23), 'occ_hour' => array(6, 20), 'weekend_hour' => array(6, 20), 'support_hour' => array(6, 20), 'tips_hour' => array(6, 20), 'bday_hour' => array(6, 20), 'teach_hour' => array(6, 20), 'bdform_hour' => array(8, 20)) as $k => $r) {
         if (isset($b[$k])) { $c[$k] = max($r[0], min($r[1], (int) $b[$k])); }
     }
     if (isset($b['report_phone'])) { $p = sgb_phone($b['report_phone']); if ($p) { $c['report_phone'] = $p; } }
@@ -42,7 +42,7 @@ function sgb_eng_save_cfg($b) {
 }
 function sgb_eng_labels() {
     return array('eng_manual' => 'جماعية: رسالة يدوية', 'eng_occ' => 'تلقائي: تهنئة مناسبة', 'eng_weekend' => 'تلقائي: عطلة الأسبوع', 'eng_support' => 'تلقائي: دعم نفسي للطلاب',
-        'eng_tips' => 'تلقائي: نصيحة لولي الأمر', 'eng_teach' => 'تلقائي: حث المدرسين على التصوير', 'eng_bday_s' => 'تلقائي: عيد ميلاد طالب', 'eng_bday_p' => 'تلقائي: عيد ميلاد ولي أمر', 'eng_report' => 'تقرير المدير اليومي');
+        'eng_tips' => 'تلقائي: نصيحة لولي الأمر', 'eng_teach' => 'تلقائي: حث المدرسين على التصوير', 'eng_bday_s' => 'تلقائي: عيد ميلاد طالب', 'eng_bday_p' => 'تلقائي: عيد ميلاد ولي أمر', 'eng_bday_t' => 'تلقائي: عيد ميلاد مدرس/موظف', 'eng_bdform_s' => 'تلقائي: طلب تاريخ الميلاد (فورم)', 'eng_bdform_p' => 'تلقائي: طلب تواريخ الميلاد (فورم)', 'eng_report' => 'تقرير المدير اليومي');
 }
 
 /* ───────── التقويم: هجري / قبطي / مناسبات ───────── */
@@ -311,6 +311,7 @@ function sgb_eng_process_jobs() {
     if ($changed) { update_option('sgb_eng_jobs', $jobs, false); }
 }
 function sgb_eng_send_one($j, $r) {
+    if ($j['kind'] === 'bdform') { return sgb_bd_send_one($r); }
     if ($j['kind'] === 'manual') {
         $txt = sgb_eng_fill(sgb_eng_spin($j['text']), $r);
         return sgb_enqueue($r['ch'], $r['phone'], $txt, array('rule' => 'eng_manual', 'dedupe' => 'eng:m:' . $j['id'] . ':' . $r['phone'], 'dedupe_hours' => 24 * 30, 'priority' => -5));
@@ -393,8 +394,16 @@ function sgb_eng_auto_run() {
             if ($r['aud'] === 'students' && sgb_eng_birth_of($r['uid']) === $md) { $s[] = $r; }
             if ($r['aud'] === 'parents' && sgb_eng_birth_of($r['uid'], true) === $md) { $p[] = $r; }
         }
+        $t = array();
+        foreach (sgb_eng_recipients(array('teachers', 'employees')) as $r) { if (sgb_eng_birth_of($r['uid']) === $md) { $t[] = $r; } }
+        if ($t) { sgb_eng_create_job(array('kind' => 'lib', 'cat' => 'bday_t', 'label' => 'أعياد ميلاد المدرسين والموظفين', 'recips' => $t)); }
         if ($s) { sgb_eng_create_job(array('kind' => 'lib', 'cat' => 'bday_s', 'label' => 'أعياد ميلاد الطلاب', 'recips' => $s)); }
         if ($p) { sgb_eng_create_job(array('kind' => 'lib', 'cat' => 'bday_p', 'label' => 'أعياد ميلاد أولياء الأمور', 'recips' => $p)); }
+    }
+    if (!empty($c['bdform_on']) && $ready('bdform', (int) $c['bdform_hour'])) {
+        $mark('bdform:' . $today);
+        $rc = sgb_bd_candidates(array('students', 'parents', 'teachers', 'employees'), 60);
+        if ($rc) { sgb_eng_create_job(array('kind' => 'bdform', 'cat' => 'bdform', 'label' => 'طلب تاريخ الميلاد (فورم)', 'recips' => $rc)); }
     }
     sgb_eng_refresh_occ(false);
 }
@@ -562,8 +571,8 @@ function sgb_eng_page() {
     }
     if (isset($_POST['sgb_eng_cfg']) && check_admin_referer('sgb_eng_cfg')) {
         $b = array();
-        foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on', 'teach_on') as $k) { $b[$k] = !empty($_POST[$k]) ? 1 : 0; }
-        foreach (array('report_hour', 'occ_hour', 'weekend_hour', 'support_hour', 'tips_hour', 'bday_hour', 'teach_hour') as $k) { if (isset($_POST[$k])) { $b[$k] = (int) $_POST[$k]; } }
+        foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on', 'teach_on', 'bdform_on') as $k) { $b[$k] = !empty($_POST[$k]) ? 1 : 0; }
+        foreach (array('report_hour', 'occ_hour', 'weekend_hour', 'support_hour', 'tips_hour', 'bday_hour', 'teach_hour', 'bdform_hour') as $k) { if (isset($_POST[$k])) { $b[$k] = (int) $_POST[$k]; } }
         $b['report_phone'] = isset($_POST['report_phone']) ? sanitize_text_field(wp_unslash($_POST['report_phone'])) : '';
         foreach (array('weekend_days', 'support_days', 'tips_days', 'teach_days') as $k) { $b[$k] = isset($_POST[$k]) ? (array) $_POST[$k] : array(); }
         $b['occ_aud'] = isset($_POST['occ_aud']) ? array_map('sanitize_key', (array) $_POST['occ_aud']) : array();
@@ -590,6 +599,11 @@ function sgb_eng_page() {
             if ($u && preg_match('/^\d{4}-\d{2}-\d{2}$/', $p[1])) { update_user_meta($u->ID, 'sg_birthdate', $p[1]); if (!empty($p[2]) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $p[2])) { update_user_meta($u->ID, 'sg_parent_birthdate', $p[2]); } $n++; } else { $bad++; }
         }
         $msg = 'تم تسجيل ' . $n . ' تاريخ ميلاد' . ($bad ? ' — ' . $bad . ' سطر لم يُطابق' : '') . '.';
+    }
+    if (isset($_POST['sgb_eng_bdnow']) && check_admin_referer('sgb_eng_bdnow')) {
+        $rc = sgb_bd_candidates(array('students', 'parents', 'teachers', 'employees'), 300);
+        if ($rc) { sgb_eng_create_job(array('kind' => 'bdform', 'cat' => 'bdform', 'label' => 'طلب تاريخ الميلاد (فورم) — يدوي', 'recips' => $rc)); $msg = 'تم إنشاء طلب الفورم لعدد ' . count($rc) . ' (ممن لم يسجّلوا ولم يُسأل سابقًا مرتين). يُرسل على دفعات.'; }
+        else { $msg = 'لا يوجد من يحتاج السؤال الآن.'; }
     }
     if (isset($_POST['sgb_eng_cancel']) && check_admin_referer('sgb_eng_cancel')) {
         $id = sanitize_text_field($_POST['sgb_eng_cancel']); $jobs = sgb_eng_jobs();
@@ -622,7 +636,8 @@ function sgb_eng_page() {
     foreach ($audn as $k => $l) { echo '<label style="margin-left:8px"><input type="checkbox" name="occ_aud[]" value="' . $k . '"' . (in_array($k, (array) $c['occ_aud'], true) ? ' checked' : '') . '> ' . $l . '</label>'; }
     echo '</td></tr>';
     echo '<tr><th>حث المدرسين على التصوير</th><td><label><input type="checkbox" name="teach_on" value="1"' . $ck('teach_on') . '> مفعّل</label> الساعة <input type="number" name="teach_hour" value="' . (int) $c['teach_hour'] . '" style="width:60px"> ' . $dayboxes('teach_days', $c['teach_days']) . '</td></tr>';
-    echo '<tr><th>أعياد الميلاد</th><td><label><input type="checkbox" name="bday_on" value="1"' . $ck('bday_on') . '> مفعّل</label> الساعة <input type="number" name="bday_hour" value="' . (int) $c['bday_hour'] . '" style="width:60px"> (للطالب ولولي الأمر عند توفر التاريخ)</td></tr>';
+    echo '<tr><th>أعياد الميلاد</th><td><label><input type="checkbox" name="bday_on" value="1"' . $ck('bday_on') . '> مفعّل</label> الساعة <input type="number" name="bday_hour" value="' . (int) $c['bday_hour'] . '" style="width:60px"> (للطالب ولولي الأمر والمدرس والموظف عند توفر التاريخ)</td></tr>';
+    echo '<tr><th>فورم تاريخ الميلاد</th><td><label><input type="checkbox" name="bdform_on" value="1"' . $ck('bdform_on') . '> مفعّل</label> الساعة <input type="number" name="bdform_hour" value="' . (int) $c['bdform_hour'] . '" style="width:60px"> يرسل رابط فورم لمن لم يسجّل تاريخه (حتى 60 شخصًا يوميًا، ومرتين كحد أقصى لكل رقم بينهما 14 يومًا)</td></tr>';
     echo '<tr><th>عطلة الأسبوع للطلاب</th><td><label><input type="checkbox" name="weekend_on" value="1"' . $ck('weekend_on') . '> مفعّل</label> الساعة <input type="number" name="weekend_hour" value="' . (int) $c['weekend_hour'] . '" style="width:60px"> ' . $dayboxes('weekend_days', $c['weekend_days']) . '</td></tr>';
     echo '<tr><th>دعم نفسي للطلاب (حسب الانتظام)</th><td><label><input type="checkbox" name="support_on" value="1"' . $ck('support_on') . '> مفعّل</label> الساعة <input type="number" name="support_hour" value="' . (int) $c['support_hour'] . '" style="width:60px"> ' . $dayboxes('support_days', $c['support_days']) . '</td></tr>';
     echo '<tr><th>نصيحة أسرية لأولياء الأمور</th><td><label><input type="checkbox" name="tips_on" value="1"' . $ck('tips_on') . '> مفعّل</label> الساعة <input type="number" name="tips_hour" value="' . (int) $c['tips_hour'] . '" style="width:60px"> ' . $dayboxes('tips_days', $c['tips_days']) . '</td></tr>';
@@ -642,7 +657,7 @@ function sgb_eng_page() {
     echo '<p><b>مناسبات إضافية</b> (<code>MM-DD|الاسم|نص التهنئة</code> أو <code>YYYY-MM-DD|…</code>):<br><textarea name="custom" rows="3" style="width:100%;max-width:560px">' . esc_textarea($cu) . '</textarea></p>';
     echo '<p><button class="button" name="sgb_eng_occ" value="1">حفظ وتحديث المناسبات</button></p></form>';
 
-    echo '<hr><h2>🎂 تواريخ الميلاد</h2><p>التاريخ يُسجَّل من صفحة تعديل المستخدم، أو الصق هنا أسطرًا بالشكل: <code>رقم الطالب,2010-05-23,2980-01-01(اختياري لولي الأمر)</code></p><form method="post">'; wp_nonce_field('sgb_eng_bday');
+    echo '<hr><h2>🎂 تواريخ الميلاد</h2><form method="post" style="margin-bottom:10px">'; wp_nonce_field('sgb_eng_bdnow'); echo '<button class="button button-primary" name="sgb_eng_bdnow" value="1" onclick="return confirm(\'إرسال رابط فورم تاريخ الميلاد لمن لم يسجّل؟\')">📨 أرسل فورم تاريخ الميلاد الآن لمن لم يسجّل</button></form><p>التاريخ يُسجَّل من صفحة تعديل المستخدم، أو الصق هنا أسطرًا بالشكل: <code>رقم الطالب,2010-05-23,2980-01-01(اختياري لولي الأمر)</code></p><form method="post">'; wp_nonce_field('sgb_eng_bday');
     echo '<textarea name="bdays" rows="4" style="width:100%;max-width:560px"></textarea><p><button class="button" name="sgb_eng_bday" value="1">تسجيل</button></p></form>';
 
     echo '<hr><h2>📋 الإرسالات</h2><table class="widefat striped"><thead><tr><th>الإرسال</th><th>الحالة</th><th>أُرسل</th><th>تم تخطيه</th><th>متبقي</th><th></th></tr></thead><tbody>';
