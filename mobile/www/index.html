@@ -162,7 +162,7 @@ var REASON={rule_off:'نوع موقوف',no_consent:'بدون موافقة مس�
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function toast(m){var t=$('toast');t.textContent=m;t.style.display='block';setTimeout(function(){t.style.display='none'},2600)}
 function fmtErr(e){var m=e&&e.message||String(e);return /Failed to fetch|NetworkError|aborted/i.test(m)?'تعذّر الاتصال بالموقع، تأكد من الإنترنت':m}
-function api(p,o){o=o||{};var c=new AbortController(),tm=setTimeout(function(){c.abort()},20000);
+function api(p,o){o=o||{};if(!S.url||!S.key)return Promise.reject(new Error('التطبيق غير مربوط بالموقع. من تبويب «المزيد» اكتب كود الربط (6 أرقام) من صفحة «ربط الواتساب» في ووردبريس ثم اضغط حفظ'));var c=new AbortController(),tm=setTimeout(function(){c.abort()},20000);
   return fetch(S.url.replace(/\/$/,'')+'/wp-json/sgb/v1/'+p+(p.indexOf('?')<0?'?':'&')+'_k='+encodeURIComponent(S.key),{method:o.method||'GET',body:o.body,signal:c.signal,headers:o.body?{'Content-Type':'text/plain'}:{}})
   .then(function(r){clearTimeout(tm);return r.text().then(function(tx){var j={};try{j=JSON.parse(tx)}catch(e){}if(!r.ok){var u2=S.url.replace(/^https?:\/\//,'').replace(/\/$/,'');throw new Error((j.message||('خطأ '+r.status))+' ['+(o.method||'GET')+' '+p.split('?')[0]+' '+r.status+(r.redirected?' redirected':'')+' '+u2+(j.message?'':' | '+tx.replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').slice(0,90))+']')}return j})})}
 function post(p,b){return api(p,{method:'POST',body:JSON.stringify(b||{})})}
