@@ -65,7 +65,7 @@ function sgb_pull($req) {
     }
     // رسائل علقت في حالة «جاري الإرسال» أكثر من 10 دقائق تعود للطابور
     $wpdb->query($wpdb->prepare("UPDATE $t SET status='qr_pending' WHERE status='sending' AND channel=%s AND next_try<%d", $ch, time() - 2700));   // 45 دقيقة (الدفعة قد تطول بسبب فواصل الحماية)
-    $midnight = (new DateTime('today', wp_timezone()))->getTimestamp();
+    $midnight = (new DateTime('today', sgb_tz()))->getTimestamp();
     $done = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM $t WHERE channel=%s AND ((sent_at>=%d AND status IN ('sent','delivered','read')) OR status='sending')", $ch, $midnight));
     $left = max(0, sgb_qr_cap($ch) - $done);
@@ -199,17 +199,17 @@ function sgb_send_digest($force = false) {
     foreach (array_slice($by, 0, 4, true) as $k => $n) { $top[] = '• ' . sgb_rule_label($k) . ': ' . $n; }
     $txt = "📊 ملخص الأسبوع — مساعد سين جيم\n\n• رسائل أُرسلت: $sent\n• وصلت للمستلمين: $ok\n• فشلت: $bad\n• تنبيهات تأخير التصوير: $late\n"
         . ($top ? "\nأكثر الرسائل:\n" . implode("\n", $top) . "\n" : '') . "\nيوم موفّق 💜";
-    return sgb_enqueue('staff', $d['phone'], $txt, array('rule' => 'manager_digest', 'priority' => 1, 'dedupe' => 'digest:' . wp_date('o-W'), 'dedupe_hours' => $force ? 1 : 150));
+    return sgb_enqueue('staff', $d['phone'], $txt, array('rule' => 'manager_digest', 'priority' => 1, 'dedupe' => 'digest:' . sgb_cairo('o-W'), 'dedupe_hours' => $force ? 1 : 150));
 }
 add_action('sgb_cron', function () {
-    if ((int) wp_date('w') === 5 && (int) wp_date('G') >= 10) { sgb_send_digest(false); }
+    if ((int) sgb_cairo('w') === 5 && (int) sgb_cairo('G') >= 10) { sgb_send_digest(false); }
 }, 30);
 
 /* ───────── تقرير تأخير المدرسين (الشهر الحالي) ───────── */
 add_filter('sgb_report', function ($r) {
     global $wpdb;
     $t = $wpdb->prefix . 'sgb_outbox';
-    $month = (new DateTime('first day of this month 00:00:00', wp_timezone()))->getTimestamp();
+    $month = (new DateTime('first day of this month 00:00:00', sgb_tz()))->getTimestamp();
     $rows = $wpdb->get_results($wpdb->prepare("SELECT to_phone, COUNT(*) n FROM $t WHERE rule_key='teacher_late' AND created>=%d AND status<>'failed' GROUP BY to_phone ORDER BY n DESC LIMIT 10", $month), ARRAY_A);
     $names = get_transient('sgb_names');
     if ($names === false) {
@@ -251,7 +251,7 @@ function sgb_backup() {
         'import' => get_option('sgb_import', array()), 'optout' => get_option('sgb_optout', array()), 'digest' => get_option('sgb_digest', array()),
         'outbox_30d' => $wpdb->get_results($wpdb->prepare("SELECT id,channel,to_phone,rule_key,status,error,created,sent_at,body FROM $t WHERE created>=%d ORDER BY id DESC LIMIT 20000", time() - 30 * 86400), ARRAY_A),
     );
-    $name = $dir . '/backup-' . wp_date('Y-m-d') . '-' . substr(md5(wp_salt() . $dir), 0, 8) . '.json';
+    $name = $dir . '/backup-' . sgb_cairo('Y-m-d') . '-' . substr(md5(wp_salt() . $dir), 0, 8) . '.json';
     file_put_contents($name, wp_json_encode($data, JSON_UNESCAPED_UNICODE));
     $files = glob($dir . '/backup-*.json');
     sort($files);

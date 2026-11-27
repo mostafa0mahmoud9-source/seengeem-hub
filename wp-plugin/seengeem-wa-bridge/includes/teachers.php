@@ -91,8 +91,8 @@ function sgb_tm_collect($cfg = null) {
     foreach ($wpdb->get_results("SELECT post_author, COUNT(*) n FROM $P WHERE post_type='courses' AND post_status='publish' GROUP BY post_author", ARRAY_A) as $r) { if (isset($T[$r['post_author']])) { $T[$r['post_author']]['courses'] = (int) $r['n']; } }
     foreach ($wpdb->get_results("SELECT post_author, MAX(post_date_gmt) d FROM $P WHERE post_type='lesson' AND post_status='publish' GROUP BY post_author", ARRAY_A) as $r) { if (isset($T[$r['post_author']]) && $r['d']) { $T[$r['post_author']]['last_lesson'] = (int) strtotime($r['d'] . ' UTC'); } }
     // إيقاع الدروس الشهري لكل كورس (نفس منطق «متابعة دروس المدرسين» في المنصة): المطلوب target درس/شهر، والمفروض لحد النهارده بالتناسب
-    $dim = (int) wp_date('t'); $day = (int) wp_date('j');
-    $month_start = wp_date('Y-m-01 00:00:00');
+    $dim = (int) sgb_cairo('t'); $day = (int) sgb_cairo('j');
+    $month_start = sgb_cairo('Y-m-01 00:00:00');
     $expected = $cfg['monthly_target'] * $day / max(1, $dim);
     $cnt = array();
     foreach ($wpdb->get_results($wpdb->prepare("SELECT c.ID cid, COUNT(l.ID) n FROM $P l JOIN $P t ON t.ID=l.post_parent JOIN $P c ON c.ID=t.post_parent
@@ -148,7 +148,7 @@ function sgb_tm_plan($cfg = null) {
     $cfg = $cfg ? $cfg : sgb_tm_cfg();
     $T = sgb_tm_collect($cfg);
     $log = (array) get_option('sgb_tm_log', array());
-    $now = time(); $date = wp_date('Y-m-d');
+    $now = time(); $date = sgb_cairo('Y-m-d');
     $out = array(); $lines = array(); $esc = array();
     $X = (array) get_option('sgb_tm_excl', array());
     foreach ($T as $uid => $t) { $T[$uid]['excl'] = isset($X[$uid]) ? $X[$uid] : ''; }
@@ -202,7 +202,7 @@ function sgb_tm_run($only_uid = 0) {
     $cfg = sgb_tm_cfg();
     $plan = sgb_tm_plan($cfg);
     $log = (array) get_option('sgb_tm_log', array());
-    $n = 0; $date = wp_date('Y-m-d');
+    $n = 0; $date = sgb_cairo('Y-m-d');
     foreach ($plan['messages'] as $m) {
         if ($m['skip'] !== '') { continue; }
         if ($only_uid && (int) $m['uid'] !== (int) $only_uid) { continue; }
@@ -216,8 +216,8 @@ function sgb_tm_run($only_uid = 0) {
 add_action('sgb_cron', function () {
     $cfg = sgb_tm_cfg();
     if (empty($cfg['enabled'])) { return; }
-    $today = wp_date('Y-m-d');
-    if (get_option('sgb_teach_last') === $today || (int) wp_date('G') < (int) $cfg['send_hour'] || sgb_in_quiet_hours()) { return; }
+    $today = sgb_cairo('Y-m-d');
+    if (get_option('sgb_teach_last') === $today || (int) sgb_cairo('G') < (int) $cfg['send_hour'] || sgb_in_quiet_hours()) { return; }
     update_option('sgb_teach_last', $today, false);
     sgb_tm_run();
 }, 30);

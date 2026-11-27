@@ -663,8 +663,8 @@ function sgb_eng_page() {
 
 /* ───────── تنظيف لمرة واحدة بعد التحديث: إلغاء المكرر المنتظر في الطابور ───────── */
 add_action('init', function () {
-    if (get_option('sgb_dd_v') === '2.8.4') { return; }
-    update_option('sgb_dd_v', '2.8.4', false);
+    if (get_option('sgb_dd_v') === '2.8.5') { return; }
+    update_option('sgb_dd_v', '2.8.5', false);
     global $wpdb;
     $t = $wpdb->prefix . 'sgb_outbox';
     $wpdb->query("UPDATE $t a JOIN $t b ON a.to_phone=b.to_phone AND a.rule_key=b.rule_key AND b.id<a.id AND (a.created-b.created)<72000

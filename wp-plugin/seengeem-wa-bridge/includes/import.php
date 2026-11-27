@@ -65,7 +65,7 @@ function sgb_import_run() {
     $jobs = (array) (isset($state['jobs']) ? $state['jobs'] : array());
     usort($jobs, function ($a, $b) { return (int) $a['priority'] - (int) $b['priority']; });
     $now = time();
-    $midnight = (new DateTime('today', wp_timezone()))->getTimestamp();
+    $midnight = (new DateTime('today', sgb_tz()))->getTimestamp();
     $t = $wpdb->prefix . 'sgb_outbox';
     $tpl = sgb_imp_template_map($cfg['templates']);
     foreach ($jobs as $job) {

@@ -95,12 +95,12 @@ function sgb_jr_purchased($uid) {
 }
 function sgb_jr_in_window($cfg = null) {
     $cfg = $cfg ? $cfg : sgb_jr_cfg();
-    $h = (int) wp_date('G');
+    $h = (int) sgb_cairo('G');
     return $h >= (int) $cfg['win_start'] && $h < (int) $cfg['win_end'];
 }
 /** أقرب وقت داخل نافذة الإرسال قبل $ts (لا يتجاوز آخر ساعة قبل الإغلاق). */
 function sgb_jr_clamp($ts, $cfg) {
-    $h = (int) wp_date('G', $ts); $m = (int) wp_date('i', $ts);
+    $h = (int) sgb_cairo('G', $ts); $m = (int) sgb_cairo('i', $ts);
     $a = (int) $cfg['win_start']; $b = (int) $cfg['win_end'];
     if ($h >= $a && $h < $b) { return $ts; }
     $diff = ($h < $a) ? ($h + 24 - ($b - 1)) : ($h - ($b - 1));
@@ -240,12 +240,12 @@ function sgb_jr_process($uid, $cfg) {
             $rt = max(sgb_jr_clamp($exp - 86400, $cfg), $now + 7200);
             $j['r1'] = ($cfg['remind'] && $rt < $exp - 3600) ? $rt : 0;
             sgb_jr_save($uid, $j);
-            sgb_jr_stage_send($uid, 'o1', $base + array('percent' => (int) $cfg['o1_pct'], 'days' => (int) $cfg['o1_days'], 'code' => $code, 'link' => sgb_jr_link($code), 'expiry' => wp_date('j/n \ا\ل\س\ا\ع\ة g:i A', $exp)), $own, $par, $cfg);
+            sgb_jr_stage_send($uid, 'o1', $base + array('percent' => (int) $cfg['o1_pct'], 'days' => (int) $cfg['o1_days'], 'code' => $code, 'link' => sgb_jr_link($code), 'expiry' => sgb_cairo('j/n \ا\ل\س\ا\ع\ة g:i A', $exp)), $own, $par, $cfg);
         }
     }
     if (!empty($j['o1']) && empty($j['o1r']) && !empty($j['r1']) && $now >= (int) $j['r1'] && $now < (int) $j['e1'] - 1800 && empty($j['o2']) && sgb_jr_in_window($cfg)) {
         $j['o1r'] = $now; sgb_jr_save($uid, $j);
-        sgb_jr_stage_send($uid, 'o1r', $base + array('percent' => (int) $cfg['o1_pct'], 'code' => $j['c1'], 'link' => sgb_jr_link($j['c1']), 'expiry' => wp_date('j/n \ا\ل\س\ا\ع\ة g:i A', (int) $j['e1'])), $own, $par, $cfg);
+        sgb_jr_stage_send($uid, 'o1r', $base + array('percent' => (int) $cfg['o1_pct'], 'code' => $j['c1'], 'link' => sgb_jr_link($j['c1']), 'expiry' => sgb_cairo('j/n \ا\ل\س\ا\ع\ة g:i A', (int) $j['e1'])), $own, $par, $cfg);
     }
 
     // 3) كوبون 30% لـ24 ساعة (ويلغي كوبون 15%)
@@ -262,12 +262,12 @@ function sgb_jr_process($uid, $cfg) {
             $rt = max(sgb_jr_clamp($exp - 6 * 3600, $cfg), $now + 7200);
             $j['r2'] = ($cfg['remind'] && $rt < $exp - 3600) ? $rt : 0;
             sgb_jr_save($uid, $j);
-            sgb_jr_stage_send($uid, 'o2', $base + array('percent' => (int) $cfg['o2_pct'], 'days' => 1, 'code' => $code, 'link' => sgb_jr_link($code), 'expiry' => wp_date('j/n \ا\ل\س\ا\ع\ة g:i A', $exp)), $own, $par, $cfg);
+            sgb_jr_stage_send($uid, 'o2', $base + array('percent' => (int) $cfg['o2_pct'], 'days' => 1, 'code' => $code, 'link' => sgb_jr_link($code), 'expiry' => sgb_cairo('j/n \ا\ل\س\ا\ع\ة g:i A', $exp)), $own, $par, $cfg);
         }
     }
     if (!empty($j['o2']) && empty($j['o2r']) && !empty($j['r2']) && $now >= (int) $j['r2'] && $now < (int) $j['e2'] - 1800 && sgb_jr_in_window($cfg)) {
         $j['o2r'] = $now; sgb_jr_save($uid, $j);
-        sgb_jr_stage_send($uid, 'o2r', $base + array('percent' => (int) $cfg['o2_pct'], 'hours' => max(1, (int) round(((int) $j['e2'] - $now) / 3600)), 'code' => $j['c2'], 'link' => sgb_jr_link($j['c2']), 'expiry' => wp_date('j/n \ا\ل\س\ا\ع\ة g:i A', (int) $j['e2'])), $own, $par, $cfg);
+        sgb_jr_stage_send($uid, 'o2r', $base + array('percent' => (int) $cfg['o2_pct'], 'hours' => max(1, (int) round(((int) $j['e2'] - $now) / 3600)), 'code' => $j['c2'], 'link' => sgb_jr_link($j['c2']), 'expiry' => sgb_cairo('j/n \ا\ل\س\ا\ع\ة g:i A', (int) $j['e2'])), $own, $par, $cfg);
     }
     // انتهت الرحلة
     $end = !empty($j['o2']) ? (int) $j['e2'] : (!$cfg['o2_on'] && !empty($j['o1']) ? (int) $j['e1'] : 0);

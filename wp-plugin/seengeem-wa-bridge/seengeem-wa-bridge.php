@@ -2,13 +2,13 @@
 /**
  * Plugin Name: SeenGeem WhatsApp Bridge
  * Description: جسر واتساب لمساعد سين جيم: رقمان (طلاب وأولياء أمور / مدرسين ومتابعة)، Cloud API رسمي + بوابة QR احتياطية، طابور رسائل، تتبع التسليم، وواجهة API للتطبيقات.
- * Version: 2.8.4
+ * Version: 2.8.5
  * Author: SeenGeem
  * Text Domain: sgb
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('SGB_VER', '2.8.4');
+define('SGB_VER', '2.8.5');
 define('SGB_OPT', 'sgb_settings');
 
 /* ───────────── الإعدادات ───────────── */
@@ -117,9 +117,12 @@ function sgb_render($text, $vars) {
     foreach ((array) $vars as $k => $v) { $text = str_replace('{' . $k . '}', (string) $v, $text); }
     return $text;
 }
+/** توقيت القاهرة دائمًا (موقعك مضبوط على UTC، فنحسب الساعات هنا بتوقيت مصر). */
+function sgb_tz() { return new DateTimeZone('Africa/Cairo'); }
+function sgb_cairo($f, $ts = null) { return wp_date($f, $ts, sgb_tz()); }
 function sgb_in_quiet_hours() {
     $s = sgb_settings();
-    $h = (int) current_time('G');
+    $h = (int) sgb_cairo('G');
     $a = (int) $s['quiet_start']; $b = (int) $s['quiet_end'];
     if ($a === $b) { return false; }
     return $a > $b ? ($h >= $a || $h < $b) : ($h >= $a && $h < $b);
@@ -137,7 +140,7 @@ function sgb_enqueue($channel, $phone, $body, $args = array()) {
     if (!$p) { return new WP_Error('bad_phone', 'رقم غير صالح'); }
     if (sgb_is_optout($p)) { return new WP_Error('optout', 'العميل طلب إيقاف الرسائل'); }
     $t = $wpdb->prefix . 'sgb_outbox';
-    // حماية من التكرار (2.8.4): ما لم تكن الرسالة يدوية/تقرير/تجربة
+    // حماية من التكرار (2.8.5): ما لم تكن الرسالة يدوية/تقرير/تجربة
     $rk = isset($args['rule']) ? sanitize_key($args['rule']) : '';
     $exempt = array('manual', 'eng_manual', 'eng_report', 'manager_digest', 'mgr_daily', 'mgr_followup', 'test');
     if ($rk !== '' && !in_array($rk, $exempt, true) && empty($args['allow_repeat'])) {
@@ -213,7 +216,7 @@ function sgb_process_queue() {
     $t = $wpdb->prefix . 'sgb_outbox';
     $s = sgb_settings();
     $quiet = sgb_in_quiet_hours();
-    $midnight = (new DateTime('today', wp_timezone()))->getTimestamp();
+    $midnight = (new DateTime('today', sgb_tz()))->getTimestamp();
     $rows = $wpdb->get_results($wpdb->prepare(
         "SELECT * FROM $t WHERE status='queued' AND next_try<=%d ORDER BY priority DESC, id ASC LIMIT 25", time()));
     foreach ($rows as $row) {
@@ -403,7 +406,7 @@ function sgb_webhook_receive($req) {
 function sgb_stats() {
     global $wpdb;
     $t = $wpdb->prefix . 'sgb_outbox';
-    $midnight = (new DateTime('today', wp_timezone()))->getTimestamp();
+    $midnight = (new DateTime('today', sgb_tz()))->getTimestamp();
     $by = $wpdb->get_results("SELECT channel, status, COUNT(*) n FROM $t GROUP BY channel, status", ARRAY_A);
     $today = (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE sent_at>=%d AND status IN ('sent','delivered','read')", $midnight));
     $recent = $wpdb->get_results("SELECT id,channel,to_phone,body,rule_key,status,error,created FROM $t ORDER BY id DESC LIMIT 60", ARRAY_A);
