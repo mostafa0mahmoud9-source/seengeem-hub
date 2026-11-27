@@ -42,8 +42,8 @@ function setState(ch, patch) { S[ch] = Object.assign(S[ch] || { state: 'idle' },
 
 async function api(p, opt) {
   const sep = p.indexOf('?') < 0 ? '?' : '&';
-  const o = Object.assign({ headers: opt && opt.body ? { 'Content-Type': 'text/plain' } : {}, signal: AbortSignal.timeout(25000) }, opt || {});
-  const r = await fetch(cfg.site.replace(/\/$/, '') + '/wp-json/sgb/v1/' + p + sep + '_k=' + encodeURIComponent(cfg.key), o);
+  const o = Object.assign({ cache: 'no-store', headers: opt && opt.body ? { 'Content-Type': 'text/plain' } : {}, signal: AbortSignal.timeout(25000) }, opt || {});
+  const r = await fetch(cfg.site.replace(/\/$/, '') + '/wp-json/sgb/v1/' + p + sep + '_k=' + encodeURIComponent(cfg.key) + '&_t=' + Date.now(), o);
   if (!r.ok) throw new Error(p + ' → HTTP ' + r.status);
   return r.json();
 }

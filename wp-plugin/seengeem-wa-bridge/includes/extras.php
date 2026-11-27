@@ -129,6 +129,15 @@ function sgb_after_ack($id, $ok, $error) {
 }
 
 /* ───────── مسارات REST ───────── */
+/** ردود الإضافة لا تُخزَّن أبدًا (كاش الموقع/المتصفح كان يعيد ردًا قديمًا فتتكرر الرسائل وتظهر حالة قديمة). */
+add_filter('rest_post_dispatch', function ($result, $server, $request) {
+    if (strpos((string) $request->get_route(), '/sgb/v1/') === 0) {
+        $result->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+        $result->header('Pragma', 'no-cache');
+        $result->header('X-LiteSpeed-Cache-Control', 'no-cache, no-store');
+    }
+    return $result;
+}, 10, 3);
 add_action('rest_api_init', function () {
     $ns = 'sgb/v1';
     register_rest_route($ns, '/gw-status', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {

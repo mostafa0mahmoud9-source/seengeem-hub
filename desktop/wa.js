@@ -58,8 +58,8 @@ function getState() {
 }
 
 async function api(p, opt) {
-  const o = Object.assign({ headers: { 'X-SGB-Key': cfg.key, 'Content-Type': 'application/json' }, signal: AbortSignal.timeout(25000) }, opt || {});
-  const r = await fetch(cfg.site.replace(/\/$/, '') + '/wp-json/sgb/v1/' + p, o);
+  const o = Object.assign({ headers: { 'X-SGB-Key': cfg.key, 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' }, cache: 'no-store', signal: AbortSignal.timeout(25000) }, opt || {});
+  const r = await fetch(cfg.site.replace(/\/$/, '') + '/wp-json/sgb/v1/' + p + (p.indexOf('?') < 0 ? '?' : '&') + '_t=' + Date.now(), o);
   if (!r.ok) throw new Error(p + ' → HTTP ' + r.status);
   return r.json();
 }
