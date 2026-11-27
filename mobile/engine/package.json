@@ -1,0 +1,10 @@
+{
+  "name": "seengeem-mobile-engine",
+  "version": "1.0.0",
+  "main": "main.js",
+  "private": true,
+  "dependencies": {
+    "@whiskeysockets/baileys": "^6.7.0",
+    "qrcode": "^1.5.4"
+  }
+}
