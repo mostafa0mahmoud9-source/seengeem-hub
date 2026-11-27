@@ -100,6 +100,14 @@ function sgb_qr_widget() {
       <input type="text" readonly id="sgb-code" value="<?php echo esc_attr($code); ?>" style="width:100%;max-width:560px;direction:ltr" onclick="this.select()"></div>
   </div>
   <div id="sgb-cards" style="display:flex;gap:16px;flex-wrap:wrap"></div>
+  <div id="sgb-link" style="margin-top:16px;border:1px solid #e3e0f2;border-radius:12px;padding:14px;background:#faf9ff">
+    <b>🔗 ربط تطبيق الموبايل أو برنامج جديد بالموقع</b>
+    <div style="margin:10px 0;text-align:center"><div style="font-size:13px;color:#555">اكتب هذا الكود في «كود الربط» داخل التطبيق (المزيد ← الاتصال بالموقع) أو البرنامج:</div>
+      <div style="font-size:34px;letter-spacing:8px;font-weight:700;direction:ltr;color:#4b2a9a;margin:6px 0"><?php echo esc_html(sgb_pair_code()); ?></div>
+      <a href="<?php echo esc_url(add_query_arg('sgb_newpair', '1')); ?>" style="font-size:12px">كود جديد</a> · <span style="font-size:12px;color:#888">صالح 30 دقيقة</span></div>
+    <details><summary style="cursor:pointer">أو الصق كود الإعداد السريع (يدويًا)</summary>
+      <input type="text" readonly value="<?php echo esc_attr($code); ?>" style="width:100%;max-width:560px;direction:ltr;margin-top:6px" onclick="this.select()"></details>
+  </div>
   <p style="color:#888;font-size:12px;margin-bottom:0">البرنامج لازم يفضل شغال على الكمبيوتر علشان الإرسال يستمر. ربط Meta Cloud API الرسمي اختياري ولاحقًا.</p>
 </div>
 <script>
