@@ -30,7 +30,8 @@ jobs:
       - name: لوجو المنصة
         shell: bash
         run: |
-          curl -fsSL -A "Mozilla/5.0" -o desktop/assets/brand.png "https://seengeem-eg.com/wp-content/plugins/sg-packages/assets/brand/icon-512.png" || echo "تعذر تحميل اللوجو، سيُستخدم الافتراضي"
+          ls -la desktop/assets/brand.png
+          test "$(stat -c%s desktop/assets/brand.png)" -gt 5000 || { echo "اللوجو ناقص"; exit 1; }
       - run: npm install
         working-directory: desktop
         env:
@@ -65,7 +66,7 @@ jobs:
           npx cap add android
           sed -i 's/minSdkVersion = 2[0-9]/minSdkVersion = 24/' android/variables.gradle
           echo "org.gradle.jvmargs=-Xmx3g" >> android/gradle.properties
-          curl -fsSL -A "Mozilla/5.0" -o $RUNNER_TEMP/logo.png "https://seengeem-eg.com/wp-content/plugins/sg-packages/assets/brand/icon-512.png" && {
+          cp ../desktop/assets/brand.png $RUNNER_TEMP/logo.png && {
             R=android/app/src/main/res
             IM=$(command -v magick || command -v convert)
             for spec in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
@@ -75,7 +76,7 @@ jobs:
               $IM $RUNNER_TEMP/logo.png -resize ${g}x${g} -background none -gravity center -extent ${f}x${f} $R/mipmap-$d/ic_launcher_foreground.png
             done
             sed -i 's/#FFFFFF/#6a3dc0/I' $R/values/ic_launcher_background.xml
-          } || echo "تعذر تحميل اللوجو، سيُستخدم الافتراضي"
+          } || { echo "فشل ضبط أيقونة الأندرويد"; exit 1; }
           npx cap sync android
           python3 scripts/patch-android.py android
           sed -i "s/versionCode 1/versionCode ${GITHUB_RUN_NUMBER}/; s/versionName \"1.0\"/versionName \"${V}\"/" android/app/build.gradle
