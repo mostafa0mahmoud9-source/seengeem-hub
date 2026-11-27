@@ -104,7 +104,7 @@ async function startChannel(ch) {
     let version; try { version = (await WW.fetchLatestBaileysVersion()).version; } catch (e) { /* افتراضي المكتبة */ }
     const B = WW.Browsers;
     const sock = makeSock({
-      auth: state, logger: quiet, printQRInTerminal: false, syncFullHistory: false, markOnlineOnConnect: false,
+      auth: state, getMessage: async (key) => SENTMAP.get(key && key.id), logger: quiet, printQRInTerminal: false, syncFullHistory: false, markOnlineOnConnect: false,
       generateHighQualityLinkPreview: false, connectTimeoutMs: 60000,
       browser: B && B.windows ? B.windows('Chrome') : ['Windows', 'Chrome', '10'],
       ...(version ? { version } : {}),
@@ -208,6 +208,11 @@ function ledgerAdd(it) {
 }
 const INFLIGHT = {};   // id -> وقت البدء (يمنع حلقتين من إرسال نفس الرسالة معًا)
 
+// رسائل أُرسلت حديثًا: مطلوبة لإعادة الإرسال لو جهاز المستلم فشل في فك التشفير (وإلا تظهر «في انتظار هذه الرسالة»)
+const SENTMAP = new Map();
+function rememberSent(msg) {
+  try { if (msg && msg.key && msg.key.id && msg.message) { SENTMAP.set(msg.key.id, msg.message); if (SENTMAP.size > 500) SENTMAP.delete(SENTMAP.keys().next().value); } } catch (e) { /* ignore */ }
+}
 const ACKQ = [];
 async function ackSent(id, wa) {
   for (let i = 0; i < 4; i++) {
@@ -243,7 +248,7 @@ async function loop(ch, gen) {
           // محاكاة بشرية: «يكتب...» لمدة قصيرة قبل الإرسال
           try { await sock.presenceSubscribe(jid); await sock.sendPresenceUpdate('composing', jid); await sleep(rnd(1500, 4000)); await sock.sendPresenceUpdate('paused', jid); } catch (e) { /* ليست أساسية */ }
           const msg = await sock.sendMessage(jid, { text: it.body });
-          sentRun++; fails = 0; ledgerAdd(it);
+          sentRun++; fails = 0; ledgerAdd(it); rememberSent(msg);
           await ackSent(it.id, msg && msg.key && msg.key.id);   // الإرسال تم فعلًا: أي فشل في التأكيد لا يجعل الرسالة «فاشلة»
         } catch (e) {
           const m = String(e && e.message || e);
