@@ -343,6 +343,15 @@ function sgb_eng_birth_of($uid, $parent = false) {
     return '';
 }
 function sgb_eng_auto() {
+    // قفل ذري: يمنع تشغيلين متزامنين من إنشاء نفس الإرسال مرتين
+    if (!add_option('sgb_eng_lock', time(), '', 'no')) {
+        if (time() - (int) get_option('sgb_eng_lock', 0) < 120) { return; }
+        update_option('sgb_eng_lock', time(), false);
+    }
+    try { sgb_eng_auto_run(); sgb_eng_process_jobs(); } catch (Exception $e) { /* نكمل */ }
+    delete_option('sgb_eng_lock');
+}
+function sgb_eng_auto_run() {
     $c = sgb_eng_cfg();
     $today = sgb_eng_d('Y-m-d'); $hour = (int) sgb_eng_d('G'); $dow = (int) sgb_eng_d('w');
     $done = (array) get_option('sgb_eng_done', array());
@@ -393,7 +402,6 @@ add_action('sgb_cron', function () {
     if (get_transient('sgb_eng_tick')) { return; }
     set_transient('sgb_eng_tick', 1, 50);
     sgb_eng_auto();
-    sgb_eng_process_jobs();
 }, 45);
 
 /* ───────── تقرير المدير اليومي ───────── */

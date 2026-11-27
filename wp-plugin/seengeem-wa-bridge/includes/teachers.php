@@ -14,7 +14,7 @@ function sgb_tm_cfg() { return array_replace(sgb_tm_defaults(), (array) get_opti
 
 function sgb_tm_texts() {
     return array(
-        'tch_inactive' => "أستاذ {name}، {وحشتنا على المنصة|المنصة مستنياك|طلابك بيسألوا عليك} 🎥\nبقالك {days} أيام ما دخلتش. كل درس جديد بتصوره بيوصّلك لطلاب أكتر وبيكبّر المنصة معاك. {ادخل النهاردة وكمّل المنهج|خد خطوة النهاردة وصوّر درس|حدد موعد تصوير وإحنا معاك}.",
+        'tch_inactive' => "أستاذ {name}، {وحشتنا على المنصة|المنصة مستنياك|طلابك بيسألوا عليك} 🎥\nبقالك {days} أيام ما دخلتش. كل درس جديد بتصوره بيوصّلك لطلاب أكتر وبيكبّر المنصة معاك. {ادخل النهاردة وكمّل المنهج|خد خطوة النهاردة وصوّر درس|حدد موعد تصوير وإحنا معاك}.\n🔗 المنصة: {site}\n📱 التطبيق: {app}",
         'tch_cadence' => "أستاذ {name}، {محتاجين نواكب المنهج سوا|لسه مطلوب دروس جديدة} في: {courses} 🎬\nمواكبة المنهج بدروس منتظمة هي اللي بتخلّي الطلاب يكملوا معاك وبتنشر اسمك واسم المنصة. {قولنا موعد التصوير ونجهز لك كل حاجة|حدد موعد قريب وإحنا معاك}.",
         'tch_qa' => "أستاذ {name}، عندك {count} سؤال من الطلاب لسه من غير رد (أقدمهم من {hours} ساعة) في: {courses} 💬\nالرد السريع بيكسب ثقة الطلاب وبيخليهم يرشّحوك لغيرهم. {ادخل رد عليهم من المنصة|خد 10 دقايق وردّ عليهم}.",
         'tch_drafts' => "أستاذ {name}، عندك {count} درس لسه مسودة من أكتر من {days} أيام في: {courses}. {انشرها|فعّلها} عشان توصل للطلاب ونواكب المنهج سوا 🚀",
@@ -154,7 +154,7 @@ function sgb_tm_plan($cfg = null) {
     foreach ($T as $uid => $t) { $T[$uid]['excl'] = isset($X[$uid]) ? $X[$uid] : ''; }
     foreach ($T as $uid => $t) {
         if ($t['excl'] === 'full') { continue; }
-        $v = array('name' => $t['name']);
+        $v = array('name' => $t['name'], 'site' => home_url('/'), 'app' => home_url('/app'));
         $items = array();
         if (in_array('inactive', $t['flags'], true)) { $items['tch_inactive'] = $v + array('days' => $t['login_days']); }
         if ($cfg['cadence_msg'] && in_array('cadence', $t['flags'], true)) { $items['tch_cadence'] = $v + array('courses' => sgb_tm_join(array_map(function ($c) { return $c['title'] . ' (' . $c['done'] . '/' . $c['need'] . ')'; }, $t['late_courses']))); }
