@@ -686,12 +686,14 @@ function sgb_eng_page() {
 
 /* ───────── تنظيف لمرة واحدة بعد التحديث: إلغاء المكرر المنتظر في الطابور ───────── */
 add_action('init', function () {
-    if (get_option('sgb_dd_v') === '2.8.5') { return; }
-    update_option('sgb_dd_v', '2.8.5', false);
+    if (get_option('sgb_dd_v') === '2.9.2') { return; }
+    update_option('sgb_dd_v', '2.9.2', false);
     global $wpdb;
     $t = $wpdb->prefix . 'sgb_outbox';
-    $wpdb->query("UPDATE $t a JOIN $t b ON a.to_phone=b.to_phone AND a.rule_key=b.rule_key AND b.id<a.id AND (a.created-b.created)<72000
-        SET a.status='cancelled', a.error='مكررة (نفس النوع لنفس الرقم)'
-        WHERE a.status IN ('queued','qr_pending') AND a.rule_key IS NOT NULL AND a.rule_key NOT IN ('manual','eng_manual','eng_report','manager_digest','mgr_daily','mgr_followup','test')
-        AND b.status IN ('queued','qr_pending','sending','sent','delivered','read')");
+    // يُبقي أقدم رسالة آلية لكل رقم خلال 24 ساعة ويلغي الباقي المنتظر (ما عدا الرحلة واليدوي والتقارير)
+    $ex = "'manual','eng_manual','eng_report','manager_digest','mgr_daily','mgr_followup','test'";
+    $wpdb->query("UPDATE $t a JOIN $t b ON a.to_phone=b.to_phone AND b.id<a.id AND ABS(a.created-b.created)<86400
+        SET a.status='cancelled', a.error='مكررة (رسالة آلية أخرى لنفس الرقم خلال 24 ساعة)'
+        WHERE a.status IN ('queued','qr_pending') AND a.rule_key IS NOT NULL AND a.rule_key NOT IN ($ex) AND a.rule_key NOT LIKE 'jr\\_%'
+        AND b.rule_key IS NOT NULL AND b.rule_key NOT IN ($ex) AND b.status IN ('queued','qr_pending','sending','sent','delivered','read')");
 }, 20);

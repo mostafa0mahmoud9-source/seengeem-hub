@@ -71,9 +71,18 @@ function sgb_pull($req) {
     $left = max(0, sgb_qr_cap($ch) - $done);
     $minp = sgb_in_quiet_hours() ? 1 : -1000;   // كانت 0 فتُهمل الرسائل ذات الأولوية السالبة (الجماعية) ولا تُسحب أبدًا
     $rows = $wpdb->get_results($wpdb->prepare(
-        "SELECT id,to_phone,body,priority FROM $t WHERE status='qr_pending' AND channel=%s AND priority>=%d AND (priority>=2 OR %d>0) ORDER BY priority DESC, id ASC LIMIT 12", $ch, $minp, $left));
-    $out = array(); $n = 0;
+        "SELECT id,to_phone,body,priority,rule_key FROM $t WHERE status='qr_pending' AND channel=%s AND priority>=%d AND (priority>=2 OR %d>0) ORDER BY priority DESC, id ASC LIMIT 40", $ch, $minp, $left));
+    $out = array(); $n = 0; $picked = array();
     foreach ($rows as $r) {
+        if (count($out) >= 12) { break; }
+        // رقم واحد = رسالة واحدة في الدفعة، وفاصل 6 ساعات بين الرسائل الآلية لنفس الرقم (الأولوية العالية والرسائل اليدوية مستثناة)
+        $rk = (string) $r->rule_key;
+        if ((int) $r->priority < 5 && !in_array($rk, array('manual', 'eng_manual', 'eng_report', 'manager_digest', 'mgr_daily', 'mgr_followup', 'test'), true)) {
+            if (isset($picked[$r->to_phone])) { continue; }
+            $lim = time() - 6 * 3600;
+            if ($wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND id<>%d AND ((status IN ('sent','delivered','read') AND sent_at>%d) OR (status='sending' AND next_try>%d)) AND rule_key IS NOT NULL AND rule_key NOT IN ('manual','eng_manual') LIMIT 1", $r->to_phone, $r->id, $lim, $lim))) { continue; }
+        }
+        $picked[$r->to_phone] = 1;
         if ((int) $r->priority < 2) { if ($n >= $left) { continue; } $n++; }
         // لا نرسل نصًا وصل لنفس الرقم من قبل
         if ($wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND body=%s AND id<>%d AND status IN ('sent','delivered','read') AND sent_at>%d LIMIT 1", $r->to_phone, $r->body, $r->id, time() - 3 * 86400))) {

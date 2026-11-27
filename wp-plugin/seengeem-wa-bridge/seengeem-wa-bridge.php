@@ -2,13 +2,13 @@
 /**
  * Plugin Name: SeenGeem WhatsApp Bridge
  * Description: جسر واتساب لمساعد سين جيم: رقمان (طلاب وأولياء أمور / مدرسين ومتابعة)، Cloud API رسمي + بوابة QR احتياطية، طابور رسائل، تتبع التسليم، وواجهة API للتطبيقات.
- * Version: 2.9.0
+ * Version: 2.9.2
  * Author: SeenGeem
  * Text Domain: sgb
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('SGB_VER', '2.9.0');
+define('SGB_VER', '2.9.2');
 define('SGB_OPT', 'sgb_settings');
 
 /* ───────────── الإعدادات ───────────── */
@@ -147,8 +147,9 @@ function sgb_enqueue($channel, $phone, $body, $args = array()) {
         $since = time() - 20 * 3600;
         // 1) نفس النوع لنفس الرقم خلال 20 ساعة
         if ($wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND rule_key=%s AND created>%d AND status<>'failed' AND status<>'cancelled' LIMIT 1", $p, $rk, $since))) { return new WP_Error('duplicate', 'نفس النوع أُرسل لهذا الرقم اليوم'); }
-        // 2) سقف يومي للرسائل الآلية لكل رقم (3 رسائل / 24 ساعة) إلا العاجلة
-        if ((int) (isset($args['priority']) ? $args['priority'] : 0) < 5 && (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE to_phone=%s AND created>%d AND rule_key IS NOT NULL AND rule_key NOT IN ('manual','eng_manual') AND status NOT IN ('failed','cancelled')", $p, time() - 24 * 3600)) >= 3) { return new WP_Error('duplicate', 'تجاوز السقف اليومي للرقم'); }
+        // 2) سقف يومي للرسائل الآلية لكل رقم: رسالة واحدة / 24 ساعة (رحلة الطالب الجديد jr_ حتى 3) إلا العاجلة
+        $capn = strpos($rk, 'jr_') === 0 ? 3 : 1;
+        if ((int) (isset($args['priority']) ? $args['priority'] : 0) < 5 && (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE to_phone=%s AND created>%d AND rule_key IS NOT NULL AND rule_key NOT IN ('manual','eng_manual') AND status NOT IN ('failed','cancelled')", $p, time() - 24 * 3600)) >= $capn) { return new WP_Error('duplicate', 'وصلته رسالة آلية خلال 24 ساعة'); }
     }
     // 2.9: رسائل التفاعل التلقائية تتنازل عن الأولوية لرسائل العمل، وحد أسبوعي صغير
     if (strpos($rk, 'eng_') === 0 && in_array($rk, array('eng_weekend', 'eng_support', 'eng_tips', 'eng_teach', 'eng_bdform_s', 'eng_bdform_p'), true) && empty($args['allow_repeat'])) {
