@@ -64,7 +64,7 @@ function sgb_jr_student_phone($uid) {
 /** رقم ولي الأمر: مفتاح محدد في الإعدادات، ثم مفاتيح شائعة، ثم أي حقل اسمه يدل على ولي الأمر ورقم. */
 function sgb_jr_parent_phone($uid, $own = '') {
     $cfg = sgb_jr_cfg();
-    $keys = array_filter(array_merge(array($cfg['parent_meta']), array('parent_phone', 'parent_mobile', 'parent_whatsapp', 'guardian_phone', 'father_phone', 'mother_phone', 'parent_number', 'phone_parent', 'billing_parent_phone')));
+    $keys = array_filter(array_merge(array($cfg['parent_meta']), array('sg_parent_phone', 'parent_phone', 'parent_mobile', 'parent_whatsapp', 'guardian_phone', 'father_phone', 'mother_phone', 'parent_number', 'phone_parent', 'billing_parent_phone')));
     foreach ($keys as $k) {
         $p = sgb_phone((string) get_user_meta($uid, $k, true));
         if ($p && $p !== $own) { return $p; }
@@ -211,7 +211,7 @@ function sgb_jr_process($uid, $cfg) {
     $base = array('name' => $name, 'site' => home_url('/'));
 
     // 1) ترحيب (لا يتكرر لو وصل الرقم نفسه ترحيب «lead_welcome» خلال آخر يومين)
-    if ($cfg['welcome'] && empty($j['w'])) {
+    if ($cfg['welcome'] && empty($j['w']) && $now >= (int) $j['start'] + 900) {
         $j['w'] = $now;
         global $wpdb;
         $t = $wpdb->prefix . 'sgb_outbox';
@@ -225,6 +225,10 @@ function sgb_jr_process($uid, $cfg) {
     // 2) كوبون 15%
     $o2_at = (int) $j['start'] + (int) $cfg['o2_after'] * 3600;
     if ($cfg['o1_on'] && empty($j['o1']) && empty($j['o2']) && $now >= (int) $j['start'] + (int) $cfg['o1_after'] * 3600 && $now < $o2_at && sgb_jr_in_window($cfg)) {
+        global $wpdb;
+        $ot = $wpdb->prefix . 'sgb_outbox';
+        $recent = $own ? $wpdb->get_var($wpdb->prepare("SELECT id FROM $ot WHERE to_phone=%s AND rule_key LIKE 'lead\\_%%' AND created>%d AND status<>'failed' LIMIT 1", $own, $now - 6 * 3600)) : 0;
+        if ($recent) { return; }
         $map = (array) get_option('sgb_jr_phones', array());
         $key = $own ? $own : $par;
         if (isset($map[$key]) && (int) $map[$key] !== (int) $uid) { return $closed('dup_phone'); }
