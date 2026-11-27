@@ -30,11 +30,39 @@ function sgb_paused_info() {
 }
 
 /** سحب الرسائل بواسطة بوابة QR (برنامج الكمبيوتر). */
+/** عقد التشغيل: جهاز كمبيوتر واحد فقط نشط لكل رقم، والباقي احتياطي (يمنع التعارض لو ثبّتت البرنامج على أكثر من جهاز). */
+function sgb_lease($ch, $inst, $host = '', $force = false) {
+    $inst = preg_replace('/[^a-zA-Z0-9-]/', '', (string) $inst);
+    if ($inst === '') { return array(true, ''); } // نسخ قديمة بدون معرّف
+    $L = (array) get_option('sgb_lease', array());
+    $c = isset($L[$ch]) ? (array) $L[$ch] : array();
+    $fresh = !empty($c['ts']) && (time() - (int) $c['ts']) < 180;
+    if (!$fresh || empty($c['inst']) || $c['inst'] === $inst || $force) {
+        $L[$ch] = array('inst' => $inst, 'host' => $host !== '' ? sanitize_text_field($host) : (isset($c['host']) && $c['inst'] === $inst ? $c['host'] : ''), 'ts' => time());
+        update_option('sgb_lease', $L, false);
+        return array(true, '');
+    }
+    return array(false, isset($c['host']) ? (string) $c['host'] : '');
+}
+/** هل الكمبيوتر كان «جاهز» خلال آخر 10 دقائق؟ (الموبايل احتياطي ولا يتدخل قبل ذلك) */
+function sgb_desktop_alive($ch) {
+    $g = (array) get_option('sgb_gw', array());
+    $g = isset($g[$ch]) ? (array) $g[$ch] : array();
+    $r = !empty($g['ready_ts']) ? (int) $g['ready_ts'] : ((isset($g['state']) && $g['state'] === 'ready' && !empty($g['ts'])) ? (int) $g['ts'] : 0);
+    return $r > 0 && (time() - $r) < 600;
+}
 function sgb_pull($req) {
     global $wpdb;
     $t = $wpdb->prefix . 'sgb_outbox';
     $ch = $req->get_param('channel') === 'staff' ? 'staff' : 'students';
     if (sgb_paused_info()) { return array(); }
+    if ($req->get_param('src') !== 'mobile') { $l = sgb_lease($ch, (string) $req->get_param('inst')); if (!$l[0]) { return array(); } }
+    // الموبايل احتياطي: يرسل فقط لو الكمبيوتر غير متصل/جاهز منذ أكثر من 10 دقائق
+    if ($req->get_param('src') === 'mobile') {
+        $g = (array) get_option('sgb_gw', array());
+        $g = isset($g[$ch]) ? (array) $g[$ch] : array();
+        if (sgb_desktop_alive($ch)) { return array(); }
+    }
     // رسائل علقت في حالة «جاري الإرسال» أكثر من 10 دقائق تعود للطابور
     $wpdb->query($wpdb->prepare("UPDATE $t SET status='qr_pending' WHERE status='sending' AND channel=%s AND next_try<%d", $ch, time() - 600));
     $midnight = (new DateTime('today', wp_timezone()))->getTimestamp();
@@ -85,8 +113,18 @@ add_action('rest_api_init', function () {
     register_rest_route($ns, '/gw-status', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
         $b = (array) $req->get_json_params();
         $ch = (isset($b['channel']) && $b['channel'] === 'staff') ? 'staff' : 'students';
+        if (isset($b['src']) && $b['src'] === 'mobile') { // حالة الموبايل منفصلة عن الكمبيوتر
+            $gm = (array) get_option('sgb_gw_m', array());
+            $gm[$ch] = array('state' => sanitize_key(isset($b['state']) ? $b['state'] : ''), 'phone' => sanitize_text_field(isset($b['phone']) ? $b['phone'] : ''), 'ts' => time());
+            update_option('sgb_gw_m', $gm, false);
+            return array('ok' => true);
+        }
+        $l = sgb_lease($ch, isset($b['inst']) ? $b['inst'] : '', isset($b['host']) ? $b['host'] : '', !empty($b['force']));
+        if (!$l[0]) { return array('ok' => true, 'standby' => true, 'host' => $l[1]); }
         $gw = (array) get_option('sgb_gw', array());
+        $prev_ready = isset($gw[$ch]['ready_ts']) ? (int) $gw[$ch]['ready_ts'] : 0;
         $gw[$ch] = array('state' => sanitize_key(isset($b['state']) ? $b['state'] : ''), 'phone' => sanitize_text_field(isset($b['phone']) ? $b['phone'] : ''), 'ts' => time());
+        $gw[$ch]['ready_ts'] = $gw[$ch]['state'] === 'ready' ? time() : $prev_ready;
         update_option('sgb_gw', $gw, false);
         sgb_qr_store($ch, $gw[$ch]['state'], isset($b['qr']) ? $b['qr'] : '');
         // عمر الخط كما يحدده البرنامج (يضبط مرحلة الحد اليومي)
