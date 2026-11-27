@@ -17,15 +17,20 @@ function deepLink(u) {
   pendingSetup = m[1];
   if (win && !win.isDestroyed()) { showWin(); win.webContents.send('sg:setup', m[1]); }
 }
-app.on('second-instance', (_e, argv) => { showWin(); deepLink((argv || []).find(a => /^seengeem:\/\//.test(a))); });
+app.on('second-instance', (_e, argv) => { if (!(argv || []).includes('--hidden')) { showWin(); } deepLink((argv || []).find(a => /^seengeem:\/\//.test(a))); });
 app.on('open-url', (e, u) => { e.preventDefault(); deepLink(u); });
-app.on('before-quit', () => { quitting = true; wa.shutdown().catch(() => {}); });
+app.on('before-quit', () => { quitting = true; wa.shutdown().catch(() => {}); setTimeout(() => app.exit(0), 5000); });
 
 const PAGES = 'https://mostafa0mahmoud9-source.github.io/';
 const icon = () => nativeImage.createFromPath(path.join(__dirname, 'assets', 'icon.png'));
 const trusted = e => { const u = (e && e.senderFrame && e.senderFrame.url) || ''; return u.startsWith('file://') || u.startsWith(PAGES); };
 
-function showWin() { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
+function showWin() {
+  if (!win || win.isDestroyed()) { createWindow(false); return; }
+  if (win.isMinimized()) win.restore();
+  win.setSkipTaskbar(false); win.show(); win.focus();
+  try { app.focus({ steal: true }); } catch (e) { /* ignore */ }
+}
 
 function createWindow(hidden) {
   win = new BrowserWindow({
@@ -37,6 +42,8 @@ function createWindow(hidden) {
   win.webContents.on('will-navigate', (e, url) => { if (!(url.startsWith('file://') || url.startsWith(PAGES))) { e.preventDefault(); shell.openExternal(url); } });
   win.on('close', e => { if (!quitting) { e.preventDefault(); win.hide(); } }); // يبقى شغال في الشريط
   win.on('focus', () => checkUpdates(false));
+  win.webContents.on('render-process-gone', () => { try { win.reload(); } catch (e) { /* ignore */ } });
+  win.on('unresponsive', () => { try { win.reload(); } catch (e) { /* ignore */ } });
 }
 
 function createTray() {
@@ -80,8 +87,7 @@ app.whenReady().then(() => {
   if (!gotLock) return; // نسخة ثانية: لا نشغّل المحرك حتى لا يتعارض على نفس الجلسات
   const rf = path.join(app.getPath('userData'), 'relaunch-hidden');
   const afterUpdate = fs.existsSync(rf); if (afterUpdate) { try { fs.unlinkSync(rf); } catch (e) { /* ignore */ } }
-  let atLogin = false; try { atLogin = !!app.getLoginItemSettings(LOGIN_ARGS).wasOpenedAtLogin; } catch (e) { /* ignore */ }
-  const hidden = process.argv.includes('--hidden') || atLogin || afterUpdate;
+  const hidden = process.argv.includes('--hidden') || afterUpdate;
   createWindow(hidden);
   createTray();
   deepLink(process.argv.find(a => /^seengeem:\/\//.test(a)));
