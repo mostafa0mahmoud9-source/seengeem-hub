@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>إرسال من الموبايل</title>
+<style>
+:root{--p:#3b0f82;--p2:#6a35c9;--bg:#120c1f;--c:#1c1430;--t:#f1ecfb;--m:#a79fc0;--ok:#4ade80;--bad:#f87171}
+*{box-sizing:border-box}body{margin:0;font-family:system-ui,Tahoma,sans-serif;background:var(--bg);color:var(--t);padding:0 12px 30px}
+header{background:linear-gradient(135deg,var(--p),var(--p2));margin:0 -12px 12px;padding:14px 16px;padding-top:max(14px,env(safe-area-inset-top))}
+h1{font-size:19px;margin:0}small{color:var(--m)}.card{background:var(--c);border-radius:16px;padding:16px;margin-bottom:12px}
+button{background:var(--p2);color:#fff;border:0;border-radius:10px;padding:10px 14px;font:inherit;margin:4px 2px}button.alt{background:#2c2342}
+input{width:100%;background:#120c1f;color:var(--t);border:1px solid #2c2342;border-radius:10px;padding:10px;font:inherit;margin:6px 0}
+.ok{color:var(--ok)}.bad{color:var(--bad)}img.qr{width:230px;max-width:80%;background:#fff;padding:8px;border-radius:12px}
+.code{font-size:30px;font-weight:800;letter-spacing:6px;direction:ltr;text-align:center}
+</style></head><body>
+<header><h1>📲 الإرسال من الموبايل (احتياطي)</h1><small>يشتغل فقط لو الكمبيوتر وقف أكتر من 10 دقايق</small></header>
+<div class="card" id="top"><span class="muted">جاري تشغيل المحرك...</span></div>
+<div id="cards"></div>
+<div class="card"><b>مهم للاستمرار في الخلفية</b><p><small>من إعدادات الأندرويد ← التطبيقات ← «مساعد سين جيم» ← البطارية ← اختار «غير مقيّد / Unrestricted». وسيب إشعار «المحرك شغّال» ظاهر.</small></p>
+<button class="alt" onclick="location.href='https://localhost/'">رجوع للتطبيق</button></div>
+<script>
+var N=null,ST=null,TXT={idle:'غير مربوط',starting:'جاري التشغيل...',qr:'امسح الكود أو اكتب كود الربط',ready:'متصل ✔',disconnected:'انفصل، جاري إعادة الاتصال',error:'خطأ'};
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function cmd(o){try{N.send({eventName:'cmd',args:[JSON.stringify(o)]})}catch(e){document.getElementById('top').textContent='تعذر الاتصال بالمحرك: '+e}}
+function dsDo(a,ch){if(a==='logout'&&!confirm('فصل هذا الرقم من الموبايل؟'))return;cmd({cmd:a,ch:ch})}
+function dsPair(ch){var p=prompt('اكتب رقم واتساب بالصيغة الدولية بدون + (مثال 201001234567)');if(p)cmd({cmd:'pair',ch:ch,phone:p})}
+function render(){if(!ST)return;var h='';
+ ['students','staff'].forEach(function(k){var d=ST.channels[k];
+  h+='<div class="card"><b>'+esc(d.label)+'</b><div class="'+(d.state==='ready'?'ok':(d.state==='error'?'bad':''))+'" style="margin:8px 0">'+esc(TXT[d.state]||d.state)+(d.phone?' · '+esc(d.phone):'')+'</div>';
+  if(d.error)h+='<div class="bad" style="font-size:13px">'+esc(d.error)+'</div>';
+  if(d.state==='qr'&&d.qr)h+='<div style="text-align:center"><img class="qr" src="'+d.qr+'"><br><small>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← امسح الكود (من موبايل تاني)</small></div>';
+  if(d.state==='qr'&&d.pairCode)h+='<div class="code">'+esc(d.pairCode)+'</div><small>واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف بدلًا من ذلك ← اكتب الكود</small>';
+  h+='<div><button class="alt" onclick="dsDo(\'connect\',\''+k+'\')">إعادة الاتصال</button><button class="alt" onclick="dsPair(\''+k+'\')">ربط برقم الهاتف</button><button class="alt" onclick="dsDo(\'logout\',\''+k+'\')">فصل وربط رقم آخر</button></div></div>'});
+ document.getElementById('cards').innerHTML=h;
+ document.getElementById('top').innerHTML=ST.configured?'<span class="ok">المحرك شغّال ✔</span> <small>(مربوط بالموقع)</small>':'<span class="bad">غير مربوط بالموقع. ارجع للتطبيق وأدخل كود الربط أولًا.</span>'}
+function cfgFromHash(){try{var m=location.hash.match(/c=([A-Za-z0-9_-]+)/);if(m){var j=JSON.parse(decodeURIComponent(escape(atob(m[1].replace(/-/g,'+').replace(/_/g,'/')))));if(j.u&&j.k){localStorage.setItem('sge',JSON.stringify(j));history.replaceState(null,'','engine.html')}}}catch(e){}
+ try{return JSON.parse(localStorage.getItem('sge')||'null')}catch(e){return null}}
+function boot(){var P=window.Capacitor&&window.Capacitor.Plugins&&window.Capacitor.Plugins.CapacitorNodeJS;
+ if(!P){document.getElementById('top').innerHTML='<span class="bad">هذه الصفحة تعمل داخل تطبيق الأندرويد فقط (محرك Node غير متاح).</span>';return}
+ N=P;var c=cfgFromHash();
+ P.addListener('state',function(ev){try{ST=JSON.parse((ev.args&&ev.args[0])||ev.value||'null');render()}catch(e){}});
+ var go=function(){if(c)cmd({cmd:'config',site:c.u,key:c.k});cmd({cmd:'status'})};
+ (P.whenReady?P.whenReady():Promise.resolve()).then(go).catch(go);setInterval(function(){cmd({cmd:'status'})},6000)}
+boot();
+</script></body></html>

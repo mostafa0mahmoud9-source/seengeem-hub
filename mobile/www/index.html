@@ -125,6 +125,9 @@ iframe{width:100%;height:75vh;border:0;border-radius:12px;background:#fff}
     <label>رقم الموبايل</label><input id="tph" inputmode="tel" placeholder="01012345678">
     <label>الرسالة</label><textarea id="tbd" rows="3">رسالة تجربة من مساعد سين جيم 💜</textarea>
     <button class="btn" onclick="sendTest()">إرسال</button> <span id="tres"></span></div>
+  <div class="card" id="engcard" style="display:none"><h3>📲 الإرسال من الموبايل (احتياطي)</h3>
+    <p class="muted">لو الكمبيوتر وقف أكتر من 10 دقايق، الموبايل يكمل الإرسال تلقائيًا. تربط الأرقام فيه مرة واحدة.</p>
+    <button class="btn" onclick="openEngine()">فتح محرك الموبايل</button></div>
   <div class="card"><h3>🔗 الاتصال بالموقع</h3>
     <label>كود الربط (6 أرقام من صفحة «ربط الواتساب» في ووردبريس)</label><input id="code" inputmode="numeric" placeholder="مثال: 483921">
     <details><summary>أو أدخل البيانات يدويًا</summary>
@@ -208,12 +211,15 @@ function renderChannels(){
     var h='<div class="row" style="flex-wrap:wrap"><span><b>'+esc(c.label)+'</b></span><span class="'+(ok?'ok':'bad')+'">'+st+'</span></div>';
     if(ds&&ds.safe&&ok)h+='<p class="muted">🛡️ '+esc(ds.safe)+'</p>';
     if(ds&&ds.error&&!ok)h+='<p class="bad muted">'+esc(ds.error)+'</p>';
+    if(ds&&ds.standby)h+='<div class="banner warn" style="margin:8px 0"><span>جهاز آخر نشط'+(ds.holder?' ('+esc(ds.holder)+')':'')+'. هذا الجهاز احتياطي ولن يرسل.</span><a href="#" onclick="window.sgDesktop.takeover().then(function(s){DS=s;renderHome()});return false">تفعيل هذا الجهاز</a></div>';
     if(ds&&ds.state==='qr'&&ds.pairCode)h+='<div style="text-align:center;margin:8px 0"><div style="font-size:30px;font-weight:800;letter-spacing:6px;direction:ltr">'+ds.pairCode+'</div><p class="muted">واتساب ← الأجهزة المرتبطة ← ربط جهاز ← الربط برقم الهاتف بدلًا من ذلك ← اكتب الكود</p></div>';
     if(ds&&ds.state==='qr'&&ds.qr)h+='<div style="text-align:center"><img alt="QR" src="'+ds.qr+'" style="width:230px;max-width:80%;background:#fff;padding:8px;border-radius:12px"><p class="muted">واتساب ← الأجهزة المرتبطة ← ربط جهاز ← امسح الكود</p></div>';
     if(d&&ds&&ds.state==='ready'){var ag=ds.ageDays||0,cur=ag>=30?30:(ag>=14?14:(ag>=7?7:0));h+='<div class="muted" style="margin:6px 0">عمر الخط للحماية: <select style="width:auto;display:inline;margin:0" onchange="dsAge(\''+k+'\',this.value)"><option value="0"'+(cur===0?' selected':'')+'>رقم جديد</option><option value="14"'+(cur===14||cur===7?' selected':'')+'>أكثر من أسبوعين</option><option value="30"'+(cur===30?' selected':'')+'>رقم قديم نشط (أكثر من شهر)</option></select></div>'}
     if(d){h+='<div style="margin-bottom:8px">'+(ds&&ds.enabled===false?'<button class="btn" onclick="dsDo(\'connect\',\''+k+'\')">تشغيل هذا الرقم</button>':'<button class="btn alt" onclick="dsDo(\'connect\',\''+k+'\')">إعادة الاتصال</button> <button class="btn alt" onclick="dsPair(\''+k+'\')">ربط برقم الهاتف</button> <button class="btn alt" onclick="dsDo(\'logout\',\''+k+'\')">فصل وربط رقم آخر</button> <button class="btn alt" onclick="dsDo(\'disable\',\''+k+'\')">إيقاف</button>')+'</div>'}
     return h}).join('')+(d?'':'<p class="muted">ربط الواتساب (QR) بيتم من برنامج الكمبيوتر، والتطبيق هنا بيعرض الحالة بس.</p>')}
 function dsAge(k,v){window.sgDesktop.setAge(k,+v).then(function(s){DS=s;renderHome();toast('تم ضبط عمر الخط')})}
+function openEngine(){if(!S.url||!S.key){alert('اربط التطبيق بالموقع أولًا');return}var c=btoa(unescape(encodeURIComponent(JSON.stringify({u:S.url,k:S.key})))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');location.href='https://localhost/engine.html#c='+c}
+try{if(/Android/.test(navigator.userAgent)&&localStorage.getItem('sgb_native')){var ec=document.getElementById('engcard');if(ec)ec.style.display=''}}catch(e){}
 function dsPair(k){var p=prompt('اكتب رقم واتساب بالصيغة الدولية بدون + (مثال 201001234567)');if(!p)return;window.sgDesktop.pair(k,p).then(function(s){DS=s;renderHome()})}
 function dsDo(a,k){if(a==='logout'&&!confirm('فصل الرقم الحالي؟ هتحتاج تمسح كود جديد.'))return;window.sgDesktop[a](k).then(function(s){DS=s;renderHome()})}
 function renderHome(){if(!D){$('kpis').innerHTML='';$('steps').innerHTML='<p class="muted">اربط التطبيق بالموقع من «المزيد» (رابط الموقع + مفتاح الربط). ويمكنك مسح كود الواتساب من هنا قبل الربط.</p>';if(window.sgDesktop)renderChannels();else $('chs').innerHTML='';$('emg').innerHTML='';return}
