@@ -69,6 +69,7 @@ ipcMain.handle('sg:connect', (e, ch) => (trusted(e) ? wa.connect(ch) : null));
 ipcMain.handle('sg:disable', (e, ch) => (trusted(e) ? wa.disable(ch) : null));
 ipcMain.handle('sg:age', (e, ch, d) => (trusted(e) ? wa.setAge(ch, d) : null));
 ipcMain.handle('sg:setup-pending', e => { if (!trusted(e)) return null; const c = pendingSetup; pendingSetup = null; return c; });
+ipcMain.handle('sg:pair', (e, ch, ph) => (trusted(e) ? wa.pair(ch, ph) : null));
 ipcMain.handle('sg:logout', (e, ch) => (trusted(e) ? wa.logout(ch) : null));
 
 app.whenReady().then(() => {

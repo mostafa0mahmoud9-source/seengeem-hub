@@ -43,18 +43,6 @@ function load() {
 }
 function save() { try { fs.writeFileSync(cfgPath, JSON.stringify(cfg)); } catch (e) { /* ignore */ } }
 
-function findBrowser() {
-  const pf = process.env['ProgramFiles'] || 'C:\\Program Files';
-  const pf86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
-  const la = process.env['LOCALAPPDATA'] || '';
-  const list = [
-    pf86 + '\\Microsoft\\Edge\\Application\\msedge.exe', pf + '\\Microsoft\\Edge\\Application\\msedge.exe', pf + '\\Google\\Chrome\\Application\\chrome.exe',
-    pf86 + '\\Google\\Chrome\\Application\\chrome.exe', la + '\\Microsoft\\Edge\\Application\\msedge.exe', la + '\\Google\\Chrome\\Application\\chrome.exe',
-    '/usr/bin/google-chrome', '/usr/bin/chromium', '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
-  ];
-  return list.find(p => { try { return p && fs.existsSync(p); } catch (e) { return false; } }) || '';
-}
-
 function setState(ch, patch) {
   S[ch] = Object.assign(S[ch] || { state: 'idle', qr: null, phone: '', error: '', enabled: true }, patch);
   onChange(getState());
@@ -78,96 +66,110 @@ function report(ch) {
 }
 function notify(body) { try { new Notification({ title: 'مساعد سين جيم', body }).show(); } catch (e) { /* ignore */ } }
 
-const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36';
-const ATT = {}; // عدد محاولات الفشل لكل رقم: نبدّل بين التشغيل المخفي والتشغيل بنافذة مصغّرة خارج الشاشة
 function wlog(m) { try { fs.appendFileSync(path.join(app.getPath('userData'), 'wa-log.txt'), new Date().toISOString() + ' ' + m + '\n'); } catch (e) { /* ignore */ } }
-function pupOpts(ch, exe) {
-  const alt = (ATT[ch] || 0) % 2 === 1;
-  const args = ['--no-sandbox', '--disable-gpu'];
-  if (alt) { args.push('--window-position=-3000,-3000', '--start-minimized'); }
-  wlog(ch + ' تشغيل المتصفح، الوضع: ' + (alt ? 'نافذة مصغّرة' : 'مخفي') + '، ' + exe);
-  return { headless: !alt, executablePath: exe, args };
-}
-// تشخيص: عند الفشل نلتقط لقطة شاشة وعنوان صفحة المتصفح الداخلي ونرسلها للموقع لنعرف سبب التعليق
-async function diag(ch, client, exe, err) {
+const ATT = {};
+const quiet = { level: 'silent', trace() {}, debug() {}, info() {}, warn() {}, error() {}, fatal() {}, child() { return quiet; } };
+async function diag(ch, err) {
   try {
-    const pg = client && client.pupPage; const d = { ch, t: Date.now(), v: app.getVersion(), exe, err: String(err && err.message || err).slice(0, 300) };
     let tail = ''; try { tail = fs.readFileSync(path.join(app.getPath('userData'), 'wa-log.txt'), 'utf8').slice(-1500); } catch (e) { /* ignore */ }
-    d.log = tail;
-    if (pg) {
-      d.url = pg.url();
-      d.title = await pg.title().catch(() => '');
-      d.ua = await pg.evaluate(() => navigator.userAgent).catch(() => '');
-      d.probe = await pg.evaluate(() => {
-        const o = {}; const t = (k, f) => { try { o[k] = String(f()).slice(0, 120); } catch (e) { o[k] = 'ERR ' + String(e.message).slice(0, 80); } };
-        t('debugVersion', () => window.Debug && window.Debug.VERSION);
-        t('requireType', () => typeof window.require);
-        t('sockState', () => window.require('WAWebSocketModel').Socket.state);
-        t('connRef', () => !!window.require('WAWebConnModel').Conn.ref);
-        t('wwebjs', () => typeof window.WWebJS);
-        t('store', () => typeof window.Store);
-        t('hasMetaCmd', () => typeof window.require('WAWebCmd'));
-        return o;
-      }).catch(e => ({ err: String(e.message || e) }));
-      d.text = await pg.evaluate(() => (document.body && document.body.innerText || '').slice(0, 700)).catch(() => '');
-      d.shot = await pg.screenshot({ type: 'jpeg', quality: 40, encoding: 'base64' }).catch(() => '');
-    }
-    await api('diag', { method: 'POST', body: JSON.stringify(d) });
+    await api('diag', { method: 'POST', body: JSON.stringify({ ch, t: Date.now(), v: app.getVersion(), engine: 'baileys', err: String(err && err.message || err).slice(0, 300), log: tail }) });
   } catch (e) { /* ignore */ }
 }
+function digits(v) { return String(v || '').split('@')[0].split(':')[0].replace(/\D/g, ''); }
+
 async function startChannel(ch) {
   if (cfg.channels[ch] === false) return;
   if (RT[ch] && RT[ch].client) return;
-  if (!WW) { try { WW = require('whatsapp-web.js'); } catch (e) { setState(ch, { state: 'error', error: 'مكتبة واتساب غير مثبتة' }); return; } }
+  if (!WW) { try { WW = require('@whiskeysockets/baileys'); } catch (e) { setState(ch, { state: 'error', error: 'مكتبة واتساب غير مثبتة' }); wlog('require: ' + e.message); return; } }
   if (!QRCode) { try { QRCode = require('qrcode'); } catch (e) { /* بدون QR صورة */ } }
-  const exe = findBrowser();
-  if (!exe) { setState(ch, { state: 'no_browser', error: 'ثبّت متصفح Google Chrome أو Microsoft Edge ثم أعد المحاولة' }); return; }
   const gen = ((RT[ch] && RT[ch].gen) || 0) + 1;
-  const client = new WW.Client({
-    authStrategy: new WW.LocalAuth({ clientId: ch, dataPath: sessDir }),
-    puppeteer: pupOpts(ch, exe),
-  });
-  RT[ch] = { client, gen };
-  setState(ch, { state: 'starting', qr: null, error: '' });
-  client.on('qr', async qr => {
-    let img = null;
-    try { img = QRCode ? await QRCode.toDataURL(qr, { width: 300, margin: 1 }) : null; } catch (e) { /* ignore */ }
-    setState(ch, { state: 'qr', qr: img, error: '' });
-  });
-  client.on('authenticated', () => setState(ch, { state: 'starting', qr: null }));
-  client.on('auth_failure', m => setState(ch, { state: 'error', qr: null, error: 'فشل التوثيق: ' + m }));
-  client.on('ready', () => {
-    const ph = client.info && client.info.wid ? client.info.wid.user : '';
-    if (!cfg.linked[ch]) { cfg.linked[ch] = Date.now(); save(); } // بداية عدّ عمر الخط
-    setState(ch, { state: 'ready', qr: null, phone: ph, error: '' });
-    notify('تم ربط ' + LABEL[ch] + (ph ? ' (' + ph + ')' : '') + ' ✅');
-    loop(ch, gen);
-  });
-  client.on('disconnected', reason => {
-    setState(ch, { state: 'disconnected', qr: null, error: String(reason || '') });
-    notify('انفصل ' + LABEL[ch] + '، افتح البرنامج وأعد الربط إن لزم');
-    restartLater(ch, gen);
-  });
-  client.on('message', async m => {
-    try {
-      if (m.fromMe || m.isStatus || (m.from || '').endsWith('@g.us') || (m.from || '').endsWith('@broadcast')) return;
-      await api('incoming', { method: 'POST', body: JSON.stringify({ channel: ch, from: (m.from || '').split('@')[0], body: m.body || '' }) });
-    } catch (e) { /* ignore */ }
-  });
-  client.initialize().catch(e => { diag(ch, client, exe, e); ATT[ch] = (ATT[ch] || 0) + 1; wlog(ch + ' خطأ: ' + String(e && (e.stack || e.message) || e).slice(0, 600)); setState(ch, { state: 'error', error: String(e && e.message || e) + ' (محاولة ' + ATT[ch] + '، سيعاد التشغيل تلقائيًا)' }); restartLater(ch, gen); });
+  const pairPhone = RT[ch] && RT[ch].pairPhone;
+  RT[ch] = { client: null, gen, pairPhone };
+  setState(ch, { state: 'starting', qr: null, error: '', pairCode: '' });
+  try {
+    const makeSock = WW.default || WW.makeWASocket;
+    const dir = path.join(sessDir, 'bd-' + ch);
+    fs.mkdirSync(dir, { recursive: true });
+    const { state, saveCreds } = await WW.useMultiFileAuthState(dir);
+    let version; try { version = (await WW.fetchLatestBaileysVersion()).version; } catch (e) { /* افتراضي المكتبة */ }
+    const B = WW.Browsers;
+    const sock = makeSock({
+      auth: state, logger: quiet, printQRInTerminal: false, syncFullHistory: false, markOnlineOnConnect: false,
+      generateHighQualityLinkPreview: false, connectTimeoutMs: 60000,
+      browser: B && B.windows ? B.windows('Chrome') : ['Windows', 'Chrome', '10'],
+      ...(version ? { version } : {}),
+    });
+    if (RT[ch].gen !== gen) { try { sock.end(undefined); } catch (e) { /* ignore */ } return; }
+    RT[ch].client = sock;
+    sock.ev.on('creds.update', saveCreds);
+    let pairAsked = false;
+    sock.ev.on('connection.update', async u => {
+      if (!RT[ch] || RT[ch].gen !== gen) return;
+      const { connection, lastDisconnect, qr } = u;
+      if (qr) {
+        if (RT[ch].pairPhone && !state.creds.registered) {
+          if (!pairAsked) { pairAsked = true; try { const code = await sock.requestPairingCode(RT[ch].pairPhone); setState(ch, { state: 'qr', qr: null, pairCode: code, error: '' }); } catch (e) { setState(ch, { state: 'error', error: 'تعذر طلب كود الربط: ' + e.message }); } }
+        } else {
+          let img = null;
+          try { img = QRCode ? await QRCode.toDataURL(qr, { width: 300, margin: 1 }) : null; } catch (e) { /* ignore */ }
+          setState(ch, { state: 'qr', qr: img, pairCode: '', error: '' });
+        }
+      }
+      if (connection === 'open') {
+        const ph = digits(sock.user && sock.user.id);
+        ATT[ch] = 0;
+        if (!cfg.linked[ch]) { cfg.linked[ch] = Date.now(); save(); }
+        setState(ch, { state: 'ready', qr: null, pairCode: '', phone: ph, error: '' });
+        notify('تم ربط ' + LABEL[ch] + (ph ? ' (' + ph + ')' : '') + ' ✅');
+        loop(ch, gen);
+      }
+      if (connection === 'close') {
+        const code = lastDisconnect && lastDisconnect.error && lastDisconnect.error.output && lastDisconnect.error.output.statusCode;
+        wlog(ch + ' close code=' + code + ' ' + String(lastDisconnect && lastDisconnect.error && lastDisconnect.error.message || ''));
+        if (code === (WW.DisconnectReason && WW.DisconnectReason.loggedOut || 401)) {
+          try { fs.rmSync(dir, { recursive: true, force: true }); } catch (e) { /* ignore */ }
+          delete cfg.linked[ch]; save();
+          setState(ch, { state: 'disconnected', qr: null, phone: '', error: 'تم فصل الرقم من الهاتف، أعد الربط' });
+          notify('تم فصل ' + LABEL[ch] + ' من الهاتف، أعد الربط');
+          restartLater(ch, gen, 3000);
+        } else {
+          ATT[ch] = (ATT[ch] || 0) + 1;
+          if (S[ch] && S[ch].state === 'ready') setState(ch, { state: 'disconnected', error: 'انقطع الاتصال، جاري إعادة المحاولة' });
+          restartLater(ch, gen, code === 515 || code === 428 ? 1000 : Math.min(30000, 3000 * ATT[ch]));
+        }
+      }
+    });
+    sock.ev.on('messages.upsert', async ev => {
+      try {
+        if (ev.type !== 'notify') return;
+        for (const m of ev.messages || []) {
+          const jid = (m.key && m.key.remoteJid) || '';
+          if (!m.message || m.key.fromMe || jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid === 'status@broadcast' || jid.endsWith('@newsletter')) continue;
+          const body = m.message.conversation || (m.message.extendedTextMessage && m.message.extendedTextMessage.text) || '';
+          const from = digits(m.key.senderPn || m.key.remoteJidAlt || jid);
+          await api('incoming', { method: 'POST', body: JSON.stringify({ channel: ch, from, body }) });
+        }
+      } catch (e) { /* ignore */ }
+    });
+  } catch (e) {
+    diag(ch, e); ATT[ch] = (ATT[ch] || 0) + 1;
+    wlog(ch + ' خطأ: ' + String(e && (e.stack || e.message) || e).slice(0, 600));
+    setState(ch, { state: 'error', error: String(e && e.message || e) + ' (محاولة ' + ATT[ch] + '، سيعاد التشغيل تلقائيًا)' });
+    restartLater(ch, gen, 20000);
+  }
 }
 
-function restartLater(ch, gen) {
+function restartLater(ch, gen, ms) {
   setTimeout(async () => {
     if (!RT[ch] || RT[ch].gen !== gen) return;
     await stopChannel(ch, false);
     if (cfg.channels[ch] !== false) startChannel(ch);
-  }, 20000);
+  }, ms || 20000);
 }
 
 async function stopChannel(ch, keepState) {
   const r = RT[ch];
-  if (r && r.client) { r.gen++; const c = r.client; r.client = null; try { await c.destroy(); } catch (e) { /* ignore */ } }
+  if (r) { r.gen++; const c = r.client; r.client = null; if (c) { try { c.end(undefined); } catch (e) { /* ignore */ } } }
   if (!keepState && S[ch]) { /* الحالة تبقى حتى إعادة التشغيل */ }
 }
 
@@ -177,16 +179,19 @@ async function loop(ch, gen) {
     try {
       const items = await api('pull?channel=' + ch);
       for (const it of items) {
-        if (!RT[ch] || RT[ch].gen !== gen) return;
+        if (!RT[ch] || RT[ch].gen !== gen || !RT[ch].client) return;
+        const sock = RT[ch].client;
         const ph = phaseOf(ch);
         let slow = fails >= 2 ? 2 : 1;               // تبطيء تلقائي بعد فشلين متتاليين
         try {
-          const num = await RT[ch].client.getNumberId(it.to_phone);
-          if (!num) throw new Error('الرقم غير مسجل على واتساب');
+          const res = await sock.onWhatsApp(digits(it.to_phone));
+          const hit = res && res[0];
+          if (!hit || !hit.exists) throw new Error('الرقم غير مسجل على واتساب');
+          const jid = hit.jid;
           // محاكاة بشرية: «يكتب...» لمدة قصيرة قبل الإرسال
-          try { const chat = await RT[ch].client.getChatById(num._serialized); await chat.sendStateTyping(); await sleep(rnd(1500, 4000)); } catch (e) { /* ليست أساسية */ }
-          const msg = await RT[ch].client.sendMessage(num._serialized, it.body);
-          await api('ack', { method: 'POST', body: JSON.stringify({ id: it.id, ok: true, wa_id: msg && msg.id && msg.id._serialized }) });
+          try { await sock.presenceSubscribe(jid); await sock.sendPresenceUpdate('composing', jid); await sleep(rnd(1500, 4000)); await sock.sendPresenceUpdate('paused', jid); } catch (e) { /* ليست أساسية */ }
+          const msg = await sock.sendMessage(jid, { text: it.body });
+          await api('ack', { method: 'POST', body: JSON.stringify({ id: it.id, ok: true, wa_id: msg && msg.key && msg.key.id }) });
           sentRun++; fails = 0;
         } catch (e) {
           const m = String(e && e.message || e);
@@ -253,9 +258,20 @@ async function logout(ch) {
   const r = RT[ch];
   if (r && r.client) { try { await r.client.logout(); } catch (e) { /* ignore */ } }
   await stopChannel(ch, true);
-  try { fs.rmSync(path.join(sessDir, 'session-' + ch), { recursive: true, force: true }); } catch (e) { /* ignore */ }
-  setState(ch, { state: 'idle', qr: null, phone: '' });
+  try { fs.rmSync(path.join(sessDir, 'bd-' + ch), { recursive: true, force: true }); } catch (e) { /* ignore */ }
+  delete cfg.linked[ch]; save();
+  if (RT[ch]) RT[ch].pairPhone = '';
+  setState(ch, { state: 'idle', qr: null, phone: '', pairCode: '' });
   if (cfg.channels[ch] !== false) startChannel(ch);
+  return getState();
+}
+async function pair(ch, phone) {
+  if (!CHANNELS.includes(ch)) return getState();
+  const p = digits(phone); if (p.length < 8) { setState(ch, { error: 'اكتب رقم الهاتف بالصيغة الدولية، مثال 201001234567' }); return getState(); }
+  cfg.channels[ch] = true; save();
+  await stopChannel(ch, true);
+  RT[ch] = Object.assign(RT[ch] || { gen: 0 }, { pairPhone: p });
+  await startChannel(ch);
   return getState();
 }
 async function setAge(ch, days) {
@@ -271,4 +287,4 @@ function summary() {
   return CHANNELS.map(ch => (ch === 'students' ? 'الطلاب' : 'المدرسين') + ': ' + ({ ready: 'متصل', qr: 'بانتظار الكود', starting: 'جاري التشغيل', idle: 'غير مربوط', disconnected: 'منفصل', error: 'خطأ', no_browser: 'يحتاج Chrome' }[st[ch].state] || st[ch].state)).join(' | ');
 }
 
-module.exports = { init, setConfig, getState, connect, disable, logout, setAge, shutdown, summary };
+module.exports = { pair, init, setConfig, getState, connect, disable, logout, setAge, shutdown, summary };
