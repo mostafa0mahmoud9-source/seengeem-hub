@@ -77,6 +77,18 @@ async function startChannel(ch) {
     if (RT[ch].gen !== gen) { try { sock.end(undefined); } catch (e) { /* ignore */ } return; }
     RT[ch].client = sock;
     sock.ev.on('creds.update', saveCreds);
+    // الردود الواردة: الموقع يتجاهلها طالما الكمبيوتر شغّال (لا تكرار)
+    sock.ev.on('messages.upsert', async ev => {
+      try {
+        if (ev.type !== 'notify') return;
+        for (const m of ev.messages || []) {
+          const jid = (m.key && m.key.remoteJid) || '';
+          if (!m.message || m.key.fromMe || jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid.endsWith('@newsletter')) continue;
+          const body = m.message.conversation || (m.message.extendedTextMessage && m.message.extendedTextMessage.text) || '';
+          await api('incoming', { method: 'POST', body: JSON.stringify({ src: 'mobile', channel: ch, from: digits(m.key.senderPn || m.key.remoteJidAlt || jid), body }) });
+        }
+      } catch (e) { /* ignore */ }
+    });
     let pairAsked = false;
     sock.ev.on('connection.update', async u => {
       if (!RT[ch] || RT[ch].gen !== gen) return;
