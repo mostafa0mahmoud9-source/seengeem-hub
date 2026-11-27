@@ -7,6 +7,8 @@
 const { app, Notification } = require('electron');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
+const crypto = require('crypto');
 
 const CHANNELS = ['students', 'staff'];
 const LABEL = { students: 'رقم الطلاب وأولياء الأمور', staff: 'رقم المدرسين والمتابعة' };
@@ -18,7 +20,7 @@ let cfgPath = '', sessDir = '';
 const S = {};          // حالة كل قناة
 const RT = {};         // كائنات التشغيل (client, gen)
 let onChange = () => {};
-let QRCode = null, WW = null, started = false;
+let QRCode = null, WW = null, started = false, forceNext = false;
 
 /**
  * ملف الأمان لكل خط: يتحدد تلقائيًا حسب عمر ربط الرقم بالبرنامج، ويخفّ تدريجيًا.
@@ -38,6 +40,7 @@ function phaseOf(ch) {
 
 function load() {
   try { cfg = Object.assign(cfg, JSON.parse(fs.readFileSync(cfgPath, 'utf8'))); } catch (e) { /* أول تشغيل */ }
+  if (!cfg.inst) { cfg.inst = crypto.randomUUID(); try { fs.writeFileSync(cfgPath, JSON.stringify(cfg)); } catch (e) { /* ignore */ } }
   cfg.linked = cfg.linked || {};
   cfg.channels = Object.assign({ students: true, staff: true }, cfg.channels || {});
 }
@@ -62,7 +65,10 @@ async function api(p, opt) {
 }
 function report(ch) {
   if (!cfg.site || !cfg.key || !S[ch]) return;
-  api('gw-status', { method: 'POST', body: JSON.stringify({ channel: ch, state: S[ch].state, phone: S[ch].phone, qr: S[ch].state === 'qr' ? (S[ch].qr || '') : '', since: cfg.linked[ch] ? Math.floor(cfg.linked[ch] / 1000) : 0 }) }).catch(() => {});
+  const force = !!forceNext;
+  api('gw-status', { method: 'POST', body: JSON.stringify({ channel: ch, state: S[ch].state, phone: S[ch].phone, qr: S[ch].state === 'qr' ? (S[ch].qr || '') : '', since: cfg.linked[ch] ? Math.floor(cfg.linked[ch] / 1000) : 0, inst: cfg.inst, host: os.hostname(), force: force ? 1 : 0 }) })
+    .then(r => { if (force) forceNext = false; const st = !!(r && r.standby); if (S[ch] && (!!S[ch].standby !== st || (st && S[ch].holder !== (r.host || '')))) { S[ch].standby = st; S[ch].holder = st ? (r.host || '') : ''; onChange(getState()); } })
+    .catch(() => {});
 }
 function notify(body) { try { new Notification({ title: 'مساعد سين جيم', body }).show(); } catch (e) { /* ignore */ } }
 
@@ -145,7 +151,7 @@ async function startChannel(ch) {
     });
     sock.ev.on('messages.upsert', async ev => {
       try {
-        if (ev.type !== 'notify') return;
+        if (ev.type !== 'notify' || (S[ch] && S[ch].standby)) return;
         for (const m of ev.messages || []) {
           const jid = (m.key && m.key.remoteJid) || '';
           if (!m.message || m.key.fromMe || jid.endsWith('@g.us') || jid.endsWith('@broadcast') || jid === 'status@broadcast' || jid.endsWith('@newsletter')) continue;
@@ -181,7 +187,7 @@ async function loop(ch, gen) {
   let sentRun = 0, fails = 0;
   while (RT[ch] && RT[ch].gen === gen && RT[ch].client && S[ch] && S[ch].state === 'ready') {
     try {
-      const items = await api('pull?channel=' + ch);
+      const items = await api('pull?channel=' + ch + '&inst=' + encodeURIComponent(cfg.inst || ''));
       for (const it of items) {
         if (!RT[ch] || RT[ch].gen !== gen || !RT[ch].client) return;
         const sock = RT[ch].client;
@@ -285,10 +291,11 @@ async function setAge(ch, days) {
   setState(ch, {});
   return getState();
 }
+async function takeover() { forceNext = true; CHANNELS.forEach(ch => { if (S[ch]) report(ch); }); return getState(); }
 async function shutdown() { for (const ch of CHANNELS) { await stopChannel(ch, true); } }
 function summary() {
   const st = getState().channels;
   return CHANNELS.map(ch => (ch === 'students' ? 'الطلاب' : 'المدرسين') + ': ' + ({ ready: 'متصل', qr: 'بانتظار الكود', starting: 'جاري التشغيل', idle: 'غير مربوط', disconnected: 'منفصل', error: 'خطأ', no_browser: 'يحتاج Chrome' }[st[ch].state] || st[ch].state)).join(' | ');
 }
 
-module.exports = { pair, init, setConfig, getState, connect, disable, logout, setAge, shutdown, summary };
+module.exports = { takeover, pair, init, setConfig, getState, connect, disable, logout, setAge, shutdown, summary };

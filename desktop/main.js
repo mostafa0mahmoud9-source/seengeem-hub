@@ -49,7 +49,7 @@ function refreshTray() {
     { label: 'فتح مساعد سين جيم', click: showWin },
     { label: wa.summary(), enabled: false },
     { label: 'تحقق من التحديثات الآن', click: () => checkUpdates(true) },
-    { label: 'تشغيل مع ويندوز', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: m => app.setLoginItemSettings({ openAtLogin: m.checked }) },
+    { label: 'تشغيل مع ويندوز', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: m => app.setLoginItemSettings({ openAtLogin: m.checked, args: ['--hidden'] }) },
     { type: 'separator' },
     { label: 'خروج نهائي', click: () => { quitting = true; app.quit(); } },
   ]));
@@ -69,6 +69,7 @@ ipcMain.handle('sg:connect', (e, ch) => (trusted(e) ? wa.connect(ch) : null));
 ipcMain.handle('sg:disable', (e, ch) => (trusted(e) ? wa.disable(ch) : null));
 ipcMain.handle('sg:age', (e, ch, d) => (trusted(e) ? wa.setAge(ch, d) : null));
 ipcMain.handle('sg:setup-pending', e => { if (!trusted(e)) return null; const c = pendingSetup; pendingSetup = null; return c; });
+ipcMain.handle('sg:takeover', e => (trusted(e) ? wa.takeover() : null));
 ipcMain.handle('sg:pair', (e, ch, ph) => (trusted(e) ? wa.pair(ch, ph) : null));
 ipcMain.handle('sg:logout', (e, ch) => (trusted(e) ? wa.logout(ch) : null));
 
@@ -79,14 +80,17 @@ app.whenReady().then(() => {
   powerSaveBlocker.start('prevent-app-suspension'); // لا يدخل البرنامج في سكون أثناء الإرسال
   // أول تشغيل: يعمل تلقائيًا مع ويندوز (يمكن إيقافه من أيقونة الشريط)
   const flag = path.join(app.getPath('userData'), 'autostart-set');
-  if (!fs.existsSync(flag)) { try { app.setLoginItemSettings({ openAtLogin: true }); fs.writeFileSync(flag, '1'); } catch (e) { /* ignore */ } }
+  if (!fs.existsSync(flag)) { try { app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] }); fs.writeFileSync(flag, '1'); } catch (e) { /* ignore */ } }
+  else { try { if (app.getLoginItemSettings().openAtLogin) app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] }); } catch (e) { /* ignore */ } } // تجديد المسار بعد كل تحديث
   wa.init({ onChange: s => { refreshTray(); if (win && !win.isDestroyed()) win.webContents.send('sg:state', s); } });
-  if (app.getLoginItemSettings().wasOpenedAtLogin) win.hide();
+  const rf = path.join(app.getPath('userData'), 'relaunch-hidden');
+  const afterUpdate = fs.existsSync(rf); if (afterUpdate) { try { fs.unlinkSync(rf); } catch (e) { /* ignore */ } }
+  if (process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin || afterUpdate) win.hide();
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('update-downloaded', () => {
     new Notification({ title: 'مساعد سين جيم', body: 'تم تنزيل تحديث جديد، جاري التثبيت وإعادة التشغيل...' }).show();
-    setTimeout(() => { quitting = true; autoUpdater.quitAndInstall(true, true); }, 4000);
+    setTimeout(() => { quitting = true; try { fs.writeFileSync(path.join(app.getPath('userData'), 'relaunch-hidden'), '1'); } catch (e) { /* ignore */ } autoUpdater.quitAndInstall(true, true); }, 4000);
   });
   autoUpdater.on('error', () => {});
   checkUpdates(true);
