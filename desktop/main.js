@@ -5,7 +5,10 @@ const { autoUpdater } = require('electron-updater');
 const wa = require('./wa');
 
 let win = null, tray = null, quitting = false, lastCheck = 0;
-if (!app.requestSingleInstanceLock()) { app.quit(); }
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) { app.quit(); }
+const LOGIN_ARGS = { args: ['--hidden'] };
+const offFlag = () => path.join(app.getPath('userData'), 'autostart-off');
 let pendingSetup = null;
 app.setAsDefaultProtocolClient('seengeem');
 function deepLink(u) {
@@ -24,9 +27,9 @@ const trusted = e => { const u = (e && e.senderFrame && e.senderFrame.url) || ''
 
 function showWin() { if (!win) return; if (win.isMinimized()) win.restore(); win.show(); win.focus(); }
 
-function createWindow() {
+function createWindow(hidden) {
   win = new BrowserWindow({
-    width: 1100, height: 800, minWidth: 380, title: 'مساعد سين جيم', icon: icon(), autoHideMenuBar: true,
+    show: !hidden, width: 1100, height: 800, minWidth: 380, title: 'مساعد سين جيم', icon: icon(), autoHideMenuBar: true,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   win.loadFile(path.join(__dirname, 'www', 'index.html'));
@@ -49,7 +52,7 @@ function refreshTray() {
     { label: 'فتح مساعد سين جيم', click: showWin },
     { label: wa.summary(), enabled: false },
     { label: 'تحقق من التحديثات الآن', click: () => checkUpdates(true) },
-    { label: 'تشغيل مع ويندوز', type: 'checkbox', checked: app.getLoginItemSettings().openAtLogin, click: m => app.setLoginItemSettings({ openAtLogin: m.checked, args: ['--hidden'] }) },
+    { label: 'تشغيل مع ويندوز', type: 'checkbox', checked: !fs.existsSync(offFlag()), click: m => { try { if (m.checked) { fs.rmSync(offFlag(), { force: true }); } else { fs.writeFileSync(offFlag(), '1'); } app.setLoginItemSettings({ openAtLogin: !!m.checked, args: ['--hidden'] }); } catch (e) { /* ignore */ } } },
     { type: 'separator' },
     { label: 'خروج نهائي', click: () => { quitting = true; app.quit(); } },
   ]));
@@ -74,18 +77,18 @@ ipcMain.handle('sg:pair', (e, ch, ph) => (trusted(e) ? wa.pair(ch, ph) : null));
 ipcMain.handle('sg:logout', (e, ch) => (trusted(e) ? wa.logout(ch) : null));
 
 app.whenReady().then(() => {
-  createWindow();
+  if (!gotLock) return; // نسخة ثانية: لا نشغّل المحرك حتى لا يتعارض على نفس الجلسات
+  const rf = path.join(app.getPath('userData'), 'relaunch-hidden');
+  const afterUpdate = fs.existsSync(rf); if (afterUpdate) { try { fs.unlinkSync(rf); } catch (e) { /* ignore */ } }
+  let atLogin = false; try { atLogin = !!app.getLoginItemSettings(LOGIN_ARGS).wasOpenedAtLogin; } catch (e) { /* ignore */ }
+  const hidden = process.argv.includes('--hidden') || atLogin || afterUpdate;
+  createWindow(hidden);
   createTray();
   deepLink(process.argv.find(a => /^seengeem:\/\//.test(a)));
   powerSaveBlocker.start('prevent-app-suspension'); // لا يدخل البرنامج في سكون أثناء الإرسال
-  // أول تشغيل: يعمل تلقائيًا مع ويندوز (يمكن إيقافه من أيقونة الشريط)
-  const flag = path.join(app.getPath('userData'), 'autostart-set');
-  if (!fs.existsSync(flag)) { try { app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] }); fs.writeFileSync(flag, '1'); } catch (e) { /* ignore */ } }
-  else { try { if (app.getLoginItemSettings().openAtLogin) app.setLoginItemSettings({ openAtLogin: true, args: ['--hidden'] }); } catch (e) { /* ignore */ } } // تجديد المسار بعد كل تحديث
+  // التشغيل مع ويندوز: مفعّل دائمًا (ومُجدَّد بعد كل تحديث) إلا لو أوقفه المستخدم من أيقونة الشريط
+  try { app.setLoginItemSettings({ openAtLogin: !fs.existsSync(offFlag()), args: ['--hidden'] }); } catch (e) { /* ignore */ }
   wa.init({ onChange: s => { refreshTray(); if (win && !win.isDestroyed()) win.webContents.send('sg:state', s); } });
-  const rf = path.join(app.getPath('userData'), 'relaunch-hidden');
-  const afterUpdate = fs.existsSync(rf); if (afterUpdate) { try { fs.unlinkSync(rf); } catch (e) { /* ignore */ } }
-  if (process.argv.includes('--hidden') || app.getLoginItemSettings().wasOpenedAtLogin || afterUpdate) win.hide();
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = true;
   autoUpdater.on('update-downloaded', () => {
