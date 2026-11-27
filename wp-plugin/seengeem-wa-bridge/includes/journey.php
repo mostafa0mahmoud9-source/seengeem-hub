@@ -293,16 +293,6 @@ function sgb_jr_tick() {
 add_action('sgb_cron', 'sgb_jr_tick', 35);
 
 /** رد «إيقاف» من الطالب/ولي الأمر يوقف الرحلة لهذا الرقم. */
-add_action('sgb_incoming_message', function ($channel, $phone, $body) {
-    if (preg_match('/^\s*(stop|إيقاف|ايقاف|الغاء|إلغاء|لا ترسل)\s*$/iu', (string) $body)) {
-        $l = (array) get_option('sgb_jr_stopphones', array());
-        $l[] = $phone;
-        update_option('sgb_jr_stopphones', array_values(array_unique($l)), false);
-    } elseif (preg_match('/^\s*(start|اشتراك|تشغيل)\s*$/iu', (string) $body)) {
-        update_option('sgb_jr_stopphones', array_values(array_diff((array) get_option('sgb_jr_stopphones', array()), array($phone))), false);
-    }
-}, 10, 3);
-
 /* ───────── إحصاءات ───────── */
 function sgb_jr_stats() {
     global $wpdb;

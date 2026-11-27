@@ -17,14 +17,14 @@ function sgb_eng_defaults() {
         'weekend_on' => 0, 'weekend_hour' => 11, 'weekend_days' => array(5),
         'support_on' => 0, 'support_hour' => 16, 'support_days' => array(0, 2, 4),
         'tips_on' => 0, 'tips_hour' => 18, 'tips_days' => array(0, 1, 2, 3, 4, 5, 6),
-        'bday_on' => 0, 'bday_hour' => 10, 'footer_every' => 8,
+        'bday_on' => 0, 'bday_hour' => 10,
     );
 }
 function sgb_eng_cfg() { return array_replace(sgb_eng_defaults(), (array) get_option('sgb_eng', array())); }
 function sgb_eng_save_cfg($b) {
     $c = sgb_eng_cfg();
     foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on') as $k) { if (isset($b[$k])) { $c[$k] = $b[$k] ? 1 : 0; } }
-    foreach (array('report_hour' => array(0, 23), 'occ_hour' => array(6, 20), 'weekend_hour' => array(6, 20), 'support_hour' => array(6, 20), 'tips_hour' => array(6, 20), 'bday_hour' => array(6, 20), 'footer_every' => array(0, 50)) as $k => $r) {
+    foreach (array('report_hour' => array(0, 23), 'occ_hour' => array(6, 20), 'weekend_hour' => array(6, 20), 'support_hour' => array(6, 20), 'tips_hour' => array(6, 20), 'bday_hour' => array(6, 20)) as $k => $r) {
         if (isset($b[$k])) { $c[$k] = max($r[0], min($r[1], (int) $b[$k])); }
     }
     if (isset($b['report_phone'])) { $p = sgb_phone($b['report_phone']); if ($p) { $c['report_phone'] = $p; } }
@@ -74,20 +74,16 @@ function sgb_eng_force_map() {
     foreach (preg_split('/\R/u', (string) get_option('sgb_eng_force', '')) as $ln) {
         if (preg_match('/^\s*(\d{4}-\d{2}-\d{2})\s*[|,]\s*([a-z_0-9]+)\s*$/i', $ln, $m)) { $out[] = array($m[1], strtolower($m[2])); }
     }
+    $w = (array) get_option('sgb_eng_web', array());
+    if (!empty($w['force'])) { foreach ($w['force'] as $f) { $out[] = $f; } }
     return $out;
 }
 /** مفاتيح المناسبات في تاريخ معيّن (Y-m-d). */
 function sgb_eng_occ_for($ymd) {
     list($y, $m, $d) = array_map('intval', explode('-', $ymd));
-    $keys = array();
+    $keys = sgb_eng_calc_for($ymd);
     $fixed = array('1-1' => 'newyear', '7-1' => 'coptic_xmas', '25-1' => 'revolution25', '21-3' => 'mothers', '25-4' => 'sinai', '1-5' => 'labour', '30-6' => 'june30', '23-7' => 'july23', '5-10' => 'teachers', '6-10' => 'oct6');
     if (isset($fixed[$d . '-' . $m])) { $keys[] = $fixed[$d . '-' . $m]; }
-    $east = sgb_eng_easter($y);
-    if ($ymd === $east) { $keys[] = 'coptic_easter'; }
-    if ($ymd === gmdate('Y-m-d', strtotime($east . ' UTC') + 86400)) { $keys[] = 'sham'; }
-    $h = sgb_eng_hijri($y, $m, $d);
-    $hm = array('1-1' => 'hijri_new', '3-12' => 'mawlid', '7-27' => 'isra', '9-1' => 'ramadan', '9-27' => 'qadr', '10-1' => 'eid_fitr', '12-9' => 'arafat', '12-10' => 'eid_adha');
-    if (isset($hm[$h[1] . '-' . $h[2]])) { $keys[] = $hm[$h[1] . '-' . $h[2]]; }
     // تصحيحات يدوية: لو في تاريخ مفروض لنفس المناسبة خلال ±3 أيام نُسقط المحسوب ونعتمد المفروض
     $force = sgb_eng_force_map();
     $ts = strtotime($ymd . ' UTC');
@@ -115,26 +111,54 @@ function sgb_eng_upcoming($days = 60) {
     }
     return $out;
 }
-/** تحديث كل 3 أيام: نعيد حساب القائمة ونتحقق من التواريخ الهجرية عبر Aladhan إن توفّر الاتصال. */
+/** مفاتيح المناسبات المحسوبة محليًا فقط (بدون تصحيحات). */
+function sgb_eng_calc_for($ymd) {
+    list($y, $m, $d) = array_map('intval', explode('-', $ymd));
+    $keys = array();
+    $east = sgb_eng_easter($y);
+    if ($ymd === $east) { $keys[] = 'coptic_easter'; }
+    if ($ymd === gmdate('Y-m-d', strtotime($east . ' UTC') + 86400)) { $keys[] = 'sham'; }
+    $h = sgb_eng_hijri($y, $m, $d);
+    $hm = array('1-1' => 'hijri_new', '3-12' => 'mawlid', '7-27' => 'isra', '9-1' => 'ramadan', '9-27' => 'qadr', '10-1' => 'eid_fitr', '12-9' => 'arafat', '12-10' => 'eid_adha');
+    if (isset($hm[$h[1] . '-' . $h[2]])) { $keys[] = $hm[$h[1] . '-' . $h[2]]; }
+    return $keys;
+}
+function sgb_eng_web_key($name) {
+    $map = array('/Fitr/i' => 'eid_fitr', '/Adha/i' => 'eid_adha', '/Arafat/i' => 'arafat', '/Islamic New Year|Hijri/i' => 'hijri_new', '/Prophet|Mawlid/i' => 'mawlid',
+        '/Easter Monday|Sham/i' => 'sham', '/Easter Sunday|Orthodox Easter/i' => 'coptic_easter', '/Isra|Mi.raj/i' => 'isra');
+    foreach ($map as $re => $k) { if (preg_match($re, $name)) { return $k; } }
+    return '';
+}
+/** بحث أسبوعي في الإنترنت عن مواعيد المناسبات الرسمية في مصر (Nager.Date)؛ يُعتمد التاريخ فقط لو قريب (±3 أيام) من المحسوب. */
 function sgb_eng_refresh_occ($force = false) {
     $last = (int) get_option('sgb_eng_occ_ts', 0);
-    if (!$force && time() - $last < 3 * 86400) { return; }
+    if (!$force && time() - $last < 7 * 86400) { return; }
     update_option('sgb_eng_occ_ts', time(), false);
-    $list = sgb_eng_upcoming(75);
-    $chk = array();
-    foreach ($list as $i => $o) {
-        if (!in_array($o['key'], array('hijri_new', 'mawlid', 'isra', 'ramadan', 'qadr', 'eid_fitr', 'arafat', 'eid_adha'), true)) { continue; }
-        $dmy = gmdate('d-m-Y', strtotime($o['date'] . ' UTC'));
-        $r = wp_remote_get('https://api.aladhan.com/v1/gToH/' . $dmy, array('timeout' => 6));
-        if (is_wp_error($r)) { break; }
+    $y0 = (int) wp_date('Y'); $found = array(); $status = 'ok'; $n = 0;
+    foreach (array($y0, $y0 + 1) as $yy) {
+        $r = wp_remote_get('https://date.nager.at/api/v3/PublicHolidays/' . $yy . '/EG', array('timeout' => 12));
+        if (is_wp_error($r) || wp_remote_retrieve_response_code($r) !== 200) { $status = is_wp_error($r) ? $r->get_error_message() : 'HTTP ' . wp_remote_retrieve_response_code($r); continue; }
         $j = json_decode(wp_remote_retrieve_body($r), true);
-        if (!empty($j['data']['hijri']['month']['number'])) {
-            $chk[$o['key'] . '@' . $o['date']] = (int) $j['data']['hijri']['month']['number'] . '-' . (int) $j['data']['hijri']['day'];
+        if (!is_array($j)) { continue; }
+        $n += count($j);
+        $by = array();
+        foreach ($j as $h) { $k = sgb_eng_web_key(isset($h['name']) ? $h['name'] : ''); if ($k && !empty($h['date'])) { $by[$k][] = $h['date']; } }
+        foreach ($by as $k => $dates) {
+            sort($dates);
+            $prev = null;
+            foreach ($dates as $dt) {
+                $t = strtotime($dt . ' UTC');
+                if ($prev !== null && $t - $prev <= 5 * 86400) { $prev = $t; continue; }   // اليوم الثاني/الثالث من نفس العيد
+                $prev = $t;
+                for ($o = -3; $o <= 3; $o++) {
+                    $c = gmdate('Y-m-d', $t + $o * 86400);
+                    if (in_array($k, sgb_eng_calc_for($c), true)) { if ($c !== $dt) { $found[] = array($dt, $k); } break; }
+                }
+            }
         }
     }
-    update_option('sgb_eng_occ_cache', array('ts' => time(), 'list' => $list, 'api' => $chk), false);
+    update_option('sgb_eng_web', array('ts' => time(), 'status' => $status, 'count' => $n, 'force' => $found), false);
 }
-
 /* ───────── مستلمون ───────── */
 function sgb_eng_first($n, $fallback) {
     $n = trim(preg_replace('/\s+/u', ' ', (string) $n));
@@ -159,7 +183,7 @@ function sgb_eng_grades() {
     $r = $wpdb->get_col("SELECT DISTINCT meta_value FROM {$wpdb->usermeta} WHERE meta_key='sg_grade' AND meta_value<>'' LIMIT 80");
     return array_values($r ? $r : array());
 }
-function sgb_eng_stopped() { return (array) get_option('sgb_eng_stop', array()); }
+function sgb_eng_stopped() { return array(); }   // الإيقاف من المدير فقط (من إعدادات الصفحة)
 /** يُرجع قائمة مستلمين فريدة بالرقم. كل عنصر: phone,name,child,ch,uid,aud */
 function sgb_eng_recipients($auds, $grades = array()) {
     $out = array(); $seen = array(); $stop = sgb_eng_stopped();
@@ -207,10 +231,7 @@ function sgb_eng_fill($t, $r, $extra = array()) {
     $t = preg_replace('/\bيا\s+يا\s+/u', 'يا ', $t);
     return trim(preg_replace("/[ \t]{2,}/u", ' ', $t));
 }
-function sgb_eng_footer() {
-    $n = (int) sgb_eng_cfg()['footer_every'];
-    return ($n > 0 && mt_rand(1, $n) === 1) ? "\n\nلو مش عايز تستقبل رسائل زي دي ابعت كلمة: إيقاف" : '';
-}
+function sgb_eng_footer() { return ''; }   // لا يوجد سطر إيقاف: الإيقاف بيد المدير فقط
 /** إرسال رسالة من المكتبة: يجرّب تركيبات حتى يجد تركيبة لم تُرسل لهذا الرقم من قبل. */
 function sgb_eng_send_lib($cat, $r, $extra = array(), $override_body = null, $tag = '') {
     $L = sgb_lib($cat);
@@ -405,13 +426,6 @@ function sgb_eng_send_report($test = false) {
     return sgb_enqueue('staff', $p, sgb_eng_report_text(), array('rule' => 'eng_report', 'dedupe' => $test ? null : 'eng:report:' . wp_date('Ymd'), 'dedupe_hours' => 20, 'priority' => 5));
 }
 
-/* ───────── إيقاف الرسائل من المستلم ───────── */
-add_action('sgb_incoming_message', function ($channel, $phone, $body) {
-    $l = sgb_eng_stopped();
-    if (preg_match('/^\s*(stop|إيقاف|ايقاف|الغاء|إلغاء|لا ترسل)\s*$/iu', (string) $body)) { $l[] = $phone; update_option('sgb_eng_stop', array_values(array_unique($l)), false); }
-    elseif (preg_match('/^\s*(start|اشتراك|تشغيل)\s*$/iu', (string) $body)) { update_option('sgb_eng_stop', array_values(array_diff($l, array($phone))), false); }
-}, 10, 3);
-
 /* ───────── حقول تاريخ الميلاد في ملف المستخدم ───────── */
 function sgb_eng_profile_fields($u) {
     if (!current_user_can('edit_users')) { return; }
@@ -428,6 +442,28 @@ function sgb_eng_profile_save($uid) {
 }
 add_action('personal_options_update', 'sgb_eng_profile_save');
 add_action('edit_user_profile_update', 'sgb_eng_profile_save');
+function sgb_eng_newuser_field() {
+    echo '<table class="form-table"><tr class="form-field"><th>تاريخ ميلاد الطالب</th><td><input type="date" name="sg_birthdate"></td></tr><tr class="form-field"><th>تاريخ ميلاد ولي الأمر</th><td><input type="date" name="sg_parent_birthdate"></td></tr></table>';
+}
+add_action('user_new_form', 'sgb_eng_newuser_field');
+add_action('user_register', function ($uid) {
+    foreach (array('sg_birthdate', 'sg_parent_birthdate') as $k) {
+        if (isset($_POST[$k])) { $v = sanitize_text_field(wp_unslash($_POST[$k])); if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) { update_user_meta($uid, $k, $v); } }
+    }
+}, 20);
+/* نموذج التسجيل وحسابي في ووكومرس */
+add_action('woocommerce_register_form', function () {
+    echo '<p class="form-row form-row-wide"><label for="sg_birthdate">تاريخ ميلاد الطالب</label><input type="date" class="input-text" name="sg_birthdate" id="sg_birthdate"></p><p class="form-row form-row-wide"><label for="sg_parent_birthdate">تاريخ ميلاد ولي الأمر (اختياري)</label><input type="date" class="input-text" name="sg_parent_birthdate" id="sg_parent_birthdate"></p>';
+});
+add_action('woocommerce_edit_account_form', function () {
+    $uid = get_current_user_id();
+    echo '<p class="form-row form-row-wide"><label for="sg_birthdate">تاريخ ميلاد الطالب</label><input type="date" class="input-text" name="sg_birthdate" id="sg_birthdate" value="' . esc_attr(get_user_meta($uid, 'sg_birthdate', true)) . '"></p><p class="form-row form-row-wide"><label for="sg_parent_birthdate">تاريخ ميلاد ولي الأمر</label><input type="date" class="input-text" name="sg_parent_birthdate" id="sg_parent_birthdate" value="' . esc_attr(get_user_meta($uid, 'sg_parent_birthdate', true)) . '"></p>';
+});
+add_action('woocommerce_save_account_details', function ($uid) {
+    foreach (array('sg_birthdate', 'sg_parent_birthdate') as $k) {
+        if (isset($_POST[$k])) { $v = sanitize_text_field(wp_unslash($_POST[$k])); if ($v === '' || preg_match('/^\d{4}-\d{2}-\d{2}$/', $v)) { update_user_meta($uid, $k, $v); } }
+    }
+});
 function sgb_eng_user_by_phone($p) {
     $cands = array($p, '0' . substr($p, 2), substr($p, 2));
     foreach ($cands as $c) { $u = get_user_by('login', $c); if ($u) { return $u; } }
@@ -507,7 +543,7 @@ function sgb_eng_page() {
     if (isset($_POST['sgb_eng_cfg']) && check_admin_referer('sgb_eng_cfg')) {
         $b = array();
         foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on') as $k) { $b[$k] = !empty($_POST[$k]) ? 1 : 0; }
-        foreach (array('report_hour', 'occ_hour', 'weekend_hour', 'support_hour', 'tips_hour', 'bday_hour', 'footer_every') as $k) { if (isset($_POST[$k])) { $b[$k] = (int) $_POST[$k]; } }
+        foreach (array('report_hour', 'occ_hour', 'weekend_hour', 'support_hour', 'tips_hour', 'bday_hour') as $k) { if (isset($_POST[$k])) { $b[$k] = (int) $_POST[$k]; } }
         $b['report_phone'] = isset($_POST['report_phone']) ? sanitize_text_field(wp_unslash($_POST['report_phone'])) : '';
         foreach (array('weekend_days', 'support_days', 'tips_days') as $k) { $b[$k] = isset($_POST[$k]) ? (array) $_POST[$k] : array(); }
         $b['occ_aud'] = isset($_POST['occ_aud']) ? array_map('sanitize_key', (array) $_POST['occ_aud']) : array();
@@ -559,7 +595,7 @@ function sgb_eng_page() {
     echo '<p>موعد الإرسال (اختياري): <input type="datetime-local" name="when"> &nbsp; رقم للتجربة: <input name="test_phone" placeholder="01xxxxxxxxx"></p>';
     echo '<p><button class="button" name="sgb_eng_send" value="preview">معاينة وعدد المستلمين</button> <button class="button" name="sgb_eng_send" value="test">إرسال تجربة لرقمي</button> <button class="button button-primary" name="sgb_eng_send" value="go" onclick="return confirm(\'تأكيد الإرسال للفئات المختارة؟\')">إرسال / جدولة</button></p></form>';
 
-    echo '<hr><h2>🤖 الرسائل التلقائية</h2><p style="color:#a00">كلها مغلقة افتراضيًا ما عدا تقرير المدير. فعّل فقط بعد معاينة أمثلة المكتبة بالأسفل. كل نوع يُرسل على دفعات صغيرة، ولا يصل نفس النص لنفس الرقم مرتين.</p>';
+    echo '<hr><h2>🤖 الرسائل التلقائية</h2><p style="color:#a00">يمكنك تشغيل أو إيقاف كل نوع من هنا. كل نوع يُرسل على دفعات صغيرة، ولا يصل نفس النص لنفس الرقم مرتين. لا يوجد خيار إيقاف للمستلمين: الإيقاف من هنا فقط.</p>';
     echo '<form method="post">'; wp_nonce_field('sgb_eng_cfg'); echo '<table class="form-table">';
     echo '<tr><th>تقرير المدير اليومي</th><td><label><input type="checkbox" name="report_on" value="1"' . $ck('report_on') . '> مفعّل</label> الساعة <input type="number" name="report_hour" value="' . (int) $c['report_hour'] . '" style="width:60px"> على رقم <input name="report_phone" value="' . esc_attr($c['report_phone']) . '"></td></tr>';
     echo '<tr><th>تهنئة المناسبات</th><td><label><input type="checkbox" name="occ_on" value="1"' . $ck('occ_on') . '> مفعّل</label> الساعة <input type="number" name="occ_hour" value="' . (int) $c['occ_hour'] . '" style="width:60px"> لـ: ';
@@ -569,7 +605,7 @@ function sgb_eng_page() {
     echo '<tr><th>عطلة الأسبوع للطلاب</th><td><label><input type="checkbox" name="weekend_on" value="1"' . $ck('weekend_on') . '> مفعّل</label> الساعة <input type="number" name="weekend_hour" value="' . (int) $c['weekend_hour'] . '" style="width:60px"> ' . $dayboxes('weekend_days', $c['weekend_days']) . '</td></tr>';
     echo '<tr><th>دعم نفسي للطلاب (حسب الانتظام)</th><td><label><input type="checkbox" name="support_on" value="1"' . $ck('support_on') . '> مفعّل</label> الساعة <input type="number" name="support_hour" value="' . (int) $c['support_hour'] . '" style="width:60px"> ' . $dayboxes('support_days', $c['support_days']) . '</td></tr>';
     echo '<tr><th>نصيحة أسرية لأولياء الأمور</th><td><label><input type="checkbox" name="tips_on" value="1"' . $ck('tips_on') . '> مفعّل</label> الساعة <input type="number" name="tips_hour" value="' . (int) $c['tips_hour'] . '" style="width:60px"> ' . $dayboxes('tips_days', $c['tips_days']) . '</td></tr>';
-    echo '<tr><th>سطر «إيقاف»</th><td>يُضاف في رسالة من كل <input type="number" name="footer_every" value="' . (int) $c['footer_every'] . '" style="width:60px"> رسالة تقريبًا (0 = لا يُضاف). من يرد بـ«إيقاف» لا تصله رسائل الحملات.</td></tr></table>';
+    echo '</table>';
     echo '<p><button class="button button-primary" name="sgb_eng_cfg" value="1">حفظ</button></p></form>';
     echo '<form method="post" style="display:inline">'; wp_nonce_field('sgb_eng_rtest'); echo '<button class="button" name="sgb_eng_rtest" value="1">أرسل تقرير تجريبي لرقم المدير الآن</button></form>';
 
@@ -577,7 +613,8 @@ function sgb_eng_page() {
     $up = sgb_eng_upcoming(45);
     if (!$up) { echo '<tr><td>لا مناسبات قريبة.</td></tr>'; }
     foreach ($up as $o) { echo '<tr><td>' . esc_html($o['date']) . '</td><td>' . esc_html($o['name']) . '</td><td><code>' . esc_html($o['key']) . '</code></td></tr>'; }
-    echo '</tbody></table><p style="color:#666">التواريخ الهجرية تُحسب تلقائيًا وتُراجع كل 3 أيام؛ قد تختلف يومًا حسب رؤية الهلال، فصحّحها يدويًا هنا.</p>';
+    $w = (array) get_option('sgb_eng_web', array());
+    echo '</tbody></table><p style="color:#666">التواريخ الهجرية تُحسب تلقائيًا ويبحث السيرفر عنها في الإنترنت كل أسبوع. ' . (!empty($w['ts']) ? 'آخر بحث: ' . esc_html(wp_date('j/n H:i', $w['ts'])) . ' — ' . esc_html($w['status']) . ' (' . (int) $w['count'] . ' عطلة رسمية، تعديلات: ' . count((array) $w['force']) . ')' : 'لم يتم البحث بعد.') . ' قد يختلف يوم حسب رؤية الهلال، فصحّحه يدويًا هنا.</p>';
     echo '<form method="post">'; wp_nonce_field('sgb_eng_occ');
     echo '<p><b>تصحيح تاريخ مناسبة</b> (سطر لكل مناسبة: <code>2027-03-10|eid_fitr</code>):<br><textarea name="force" rows="3" style="width:100%;max-width:560px">' . esc_textarea((string) get_option('sgb_eng_force', '')) . '</textarea></p>';
     $cu = ''; foreach ((array) get_option('sgb_eng_custom_occ', array()) as $x) { $cu .= $x['date'] . '|' . $x['name'] . (!empty($x['wish']) ? '|' . $x['wish'] : '') . "\n"; }
