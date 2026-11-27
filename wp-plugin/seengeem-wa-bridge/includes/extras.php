@@ -69,7 +69,7 @@ function sgb_pull($req) {
     $done = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM $t WHERE channel=%s AND ((sent_at>=%d AND status IN ('sent','delivered','read')) OR status='sending')", $ch, $midnight));
     $left = max(0, sgb_qr_cap($ch) - $done);
-    $minp = sgb_in_quiet_hours() ? 1 : 0;
+    $minp = sgb_in_quiet_hours() ? 1 : -1000;   // كانت 0 فتُهمل الرسائل ذات الأولوية السالبة (الجماعية) ولا تُسحب أبدًا
     $rows = $wpdb->get_results($wpdb->prepare(
         "SELECT id,to_phone,body,priority FROM $t WHERE status='qr_pending' AND channel=%s AND priority>=%d AND (priority>=2 OR %d>0) ORDER BY priority DESC, id ASC LIMIT 12", $ch, $minp, $left));
     $out = array(); $n = 0;

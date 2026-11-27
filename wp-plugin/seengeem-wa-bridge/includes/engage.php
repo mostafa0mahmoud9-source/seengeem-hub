@@ -659,3 +659,16 @@ function sgb_eng_page() {
     }
     echo '</tbody></table><p>إجمالي التركيبات المتاحة بدون المناسبات: <b>' . number_format_i18n($tot) . '</b>، والتركيبات تتجدد مع تكرار الاستخدام ولا يتكرر نص لنفس الرقم.</p></div>';
 }
+
+
+/* ───────── تنظيف لمرة واحدة بعد التحديث: إلغاء المكرر المنتظر في الطابور ───────── */
+add_action('init', function () {
+    if (get_option('sgb_dd_v') === '2.8.4') { return; }
+    update_option('sgb_dd_v', '2.8.4', false);
+    global $wpdb;
+    $t = $wpdb->prefix . 'sgb_outbox';
+    $wpdb->query("UPDATE $t a JOIN $t b ON a.to_phone=b.to_phone AND a.rule_key=b.rule_key AND b.id<a.id AND (a.created-b.created)<72000
+        SET a.status='cancelled', a.error='مكررة (نفس النوع لنفس الرقم)'
+        WHERE a.status IN ('queued','qr_pending') AND a.rule_key IS NOT NULL AND a.rule_key NOT IN ('manual','eng_manual','eng_report','manager_digest','mgr_daily','mgr_followup','test')
+        AND b.status IN ('queued','qr_pending','sending','sent','delivered','read')");
+}, 20);
