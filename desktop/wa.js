@@ -88,7 +88,7 @@ async function startChannel(ch) {
   if (RT[ch] && RT[ch].client) return;
   if (!WW) {
     let e1 = null;
-    try { WW = require('@whiskeysockets/baileys'); } catch (e) { e1 = e; }
+    try { WW = globalThis.__SGB_WW || require('@whiskeysockets/baileys'); } catch (e) { e1 = e; }
     if (!WW) { try { WW = await import('@whiskeysockets/baileys'); } catch (e2) { const m = String((e1 && e1.message) || e1) + ' | ' + String(e2 && e2.message || e2); wlog('require: ' + m); diag(ch, new Error('load: ' + m)); setState(ch, { state: 'error', error: 'تعذر تحميل مكتبة واتساب: ' + m.slice(0, 160) }); RT[ch] = RT[ch] || { client: null, gen: 0 }; restartLater(ch, RT[ch].gen, 30000); return; } }
   }
   if (!QRCode) { try { QRCode = require('qrcode'); } catch (e) { /* بدون QR صورة */ } }
@@ -206,6 +206,8 @@ function ledgerAdd(it) {
   for (const m of ['ids', 'keys']) { for (const k of Object.keys(L[m])) { if (now - L[m][k] > 14 * 86400000) delete L[m][k]; } }
   try { fs.writeFileSync(ledgerPath, JSON.stringify(L)); } catch (e) { /* ignore */ }
 }
+let LAST_ACT = Date.now();   // آخر نشاط إرسال (لتطبيق التحديث وقت الهدوء فقط)
+function idleFor() { return Date.now() - LAST_ACT; }
 const INFLIGHT = {};   // id -> وقت البدء (يمنع حلقتين من إرسال نفس الرسالة معًا)
 
 // رسائل أُرسلت حديثًا: مطلوبة لإعادة الإرسال لو جهاز المستلم فشل في فك التشفير (وإلا تظهر «في انتظار هذه الرسالة»)
@@ -232,6 +234,7 @@ async function loop(ch, gen) {
     try {
       await flushAcks();
       const items = await api('pull?channel=' + ch + '&inst=' + encodeURIComponent(cfg.inst || ''));
+      if (items && items.length) { LAST_ACT = Date.now(); }
       for (const it of items) {
         if (INFLIGHT[it.id] && Date.now() - INFLIGHT[it.id] < 600000) { continue; }
         if (ledgerSeen(it)) { await ackSent(it.id, null); continue; }   // اتبعتت قبل كده: نؤكد للموقع ولا نرسل تاني
@@ -248,7 +251,7 @@ async function loop(ch, gen) {
           // محاكاة بشرية: «يكتب...» لمدة قصيرة قبل الإرسال
           try { await sock.presenceSubscribe(jid); await sock.sendPresenceUpdate('composing', jid); await sleep(rnd(1500, 4000)); await sock.sendPresenceUpdate('paused', jid); } catch (e) { /* ليست أساسية */ }
           const msg = await sock.sendMessage(jid, { text: it.body });
-          sentRun++; fails = 0; ledgerAdd(it); rememberSent(msg);
+          sentRun++; fails = 0; LAST_ACT = Date.now(); ledgerAdd(it); rememberSent(msg);
           await ackSent(it.id, msg && msg.key && msg.key.id);   // الإرسال تم فعلًا: أي فشل في التأكيد لا يجعل الرسالة «فاشلة»
         } catch (e) {
           const m = String(e && e.message || e);
@@ -345,4 +348,4 @@ function summary() {
   return CHANNELS.map(ch => (ch === 'students' ? 'الطلاب' : 'المدرسين') + ': ' + ({ ready: 'متصل', qr: 'بانتظار الكود', starting: 'جاري التشغيل', idle: 'غير مربوط', disconnected: 'منفصل', error: 'خطأ', no_browser: 'يحتاج Chrome' }[st[ch].state] || st[ch].state)).join(' | ');
 }
 
-module.exports = { takeover, pair, init, setConfig, getState, connect, disable, logout, setAge, shutdown, summary };
+module.exports = { idleFor, takeover, pair, init, setConfig, getState, connect, disable, logout, setAge, shutdown, summary };

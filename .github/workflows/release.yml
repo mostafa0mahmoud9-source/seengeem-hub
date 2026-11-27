@@ -16,12 +16,16 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - name: ضبط الإصدار
         shell: bash
         run: |
           V="${VER#v}"
+          REV=$(TZ=UTC git log -1 --format=%cd --date=format:%Y%m%d%H%M%S -- desktop/wa.js mobile/engine/main.js)
+          sed -i "s#BUILD_REV = 0, BUILD_VER = '0.0.0'#BUILD_REV = ${REV}, BUILD_VER = '${V}'#" desktop/main.js
+          grep -n "BUILD_REV = " desktop/main.js | head -2
           sed -i "s#NATIVE_VER='0.0.0'#NATIVE_VER='${V}'#" mobile/www/index.html
           cd desktop
           npm pkg set version="$V"
@@ -50,6 +54,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
       - uses: actions/setup-node@v4
         with: { node-version: 22 }
       - uses: actions/setup-java@v4
@@ -57,6 +62,9 @@ jobs:
       - name: بناء وتوقيع الـ APK
         run: |
           V="${VER#v}"
+          REV=$(TZ=UTC git log -1 --format=%cd --date=format:%Y%m%d%H%M%S -- desktop/wa.js mobile/engine/main.js)
+          sed -i "s#BUILD_REV = 0, BUILD_VER = globalThis.__SGB_BVER || '0.0.0'#BUILD_REV = ${REV}, BUILD_VER = globalThis.__SGB_BVER || '${V}'#" mobile/engine/main.js
+          grep -n "BUILD_REV = " mobile/engine/main.js | head -2
           sed -i "s#NATIVE_VER='0.0.0'#NATIVE_VER='${V}'#" mobile/www/index.html
           cd mobile
           npm install --legacy-peer-deps

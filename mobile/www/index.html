@@ -192,6 +192,11 @@ function render(){renderBanner();renderHome();renderMsgs();renderReplies();rende
   else{$('sub').textContent='غير مربوط بالموقع'}}
 
 function banner(cls,txt,btn,fn){return '<div class="banner '+cls+'"><span>'+txt+'</span>'+(btn?'<button onclick="'+fn+'">'+btn+'</button>':'')+'</div>'}
+var OTA_MIN=null;
+(function(){function f(v){return String(v||'0').split('.').reduce(function(a,x){return a*1000+(parseInt(x,10)||0)},0)}
+  var nv='0.0.0';try{nv=localStorage.getItem('sgb_native')||NATIVE_VER}catch(e){nv=NATIVE_VER}
+  if(window.sgDesktop||nv==='0.0.0')return;   // الكمبيوتر يحدّث نفسه تلقائيًا
+  fetch(PAGES+'ota/ota.json?_t='+Date.now(),{cache:'no-store'}).then(function(r){return r.json()}).then(function(j){if(f(j.min)>f(nv)){OTA_MIN=j.min;try{render()}catch(e){}}}).catch(function(){})})();
 function renderBanner(){var b='';
   if(!S.url||!S.key)b=banner('warn','👋 أهلًا! ابدأ بربط التطبيق بالموقع','اربط الآن',"go('tools')");
   else if(ERR)b=banner('bad','⚠️ '+esc(ERR),'إعادة المحاولة','load(true)');
@@ -202,6 +207,7 @@ function renderBanner(){var b='';
     else if(unl.length)b=banner('warn','📵 واتساب غير مربوط: من الصفحة الرئيسية امسح كود QR (بتعملها مرة واحدة)');
     else if(D.quiet_now)b=banner('info','🌙 ساعات الهدوء: الإرسال يكمّل الصبح');
     else b=banner('ok','✅ كل شيء شغّال');}
+  if(OTA_MIN)b=banner('warn','🔄 يلزم تحديث كامل للتطبيق (إصدار '+esc(OTA_MIN)+') — التحديثات الصغيرة بعده تلقائية','تحميل التحديث',"window.open('https://github.com/mostafa0mahmoud9-source/seengeem-hub/releases/latest/download/SeenGeem-Assistant.apk','_system')")+b;
   $('banner').innerHTML=b}
 
 function renderChannels(){

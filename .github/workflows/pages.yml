@@ -3,7 +3,7 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths: ['mobile/www/**']
+    paths: ['mobile/www/**', 'desktop/wa.js', 'mobile/engine/main.js', 'ota-min.txt']
   workflow_dispatch:
 permissions:
   contents: read
@@ -17,9 +17,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: تجهيز الموقع + ملفات تحديث الأجزاء (OTA)
+        run: |
+          mkdir -p site/ota
+          cp -r mobile/www/. site/
+          cp desktop/wa.js site/ota/desktop-wa.js
+          cp mobile/engine/main.js site/ota/mobile-engine.js
+          REV=$(TZ=UTC git log -1 --format=%cd --date=format:%Y%m%d%H%M%S -- desktop/wa.js mobile/engine/main.js)
+          DS=$(sha256sum site/ota/desktop-wa.js | cut -d' ' -f1)
+          MS=$(sha256sum site/ota/mobile-engine.js | cut -d' ' -f1)
+          MIN=$(tr -d '[:space:]' < ota-min.txt)
+          printf '{"rev":%s,"min":"%s","desktop_sha":"%s","mobile_sha":"%s"}\n' "$REV" "$MIN" "$DS" "$MS" > site/ota/ota.json
+          cat site/ota/ota.json
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
-        with: { path: mobile/www }
+        with: { path: site }
   deploy:
     needs: build
     runs-on: ubuntu-latest

@@ -22,6 +22,51 @@ const sessDir = path.join(base, 'wa-sessions');
 const cfgPath = path.join(base, 'wa-config.json');
 try { fs.mkdirSync(sessDir, { recursive: true }); } catch (e) { /* ignore */ }
 
+/* ───────── تحديث الأجزاء فقط (OTA): كود المحرك يتحدّث بملف صغير بدون تثبيت APK جديد ───────── */
+const BUILD_REV = 0, BUILD_VER = globalThis.__SGB_BVER || '0.0.0';           // يضبطهم الـ workflow وقت بناء الـ APK
+const OTA_URL = 'https://mostafa0mahmoud9-source.github.io/seengeem-hub/ota/';
+const otaDir = path.join(base, 'ota');
+const sha256 = b => require('crypto').createHash('sha256').update(b).digest('hex');
+const verNum = v => String(v || '0').split('.').reduce((a, x) => a * 1000 + (parseInt(x, 10) || 0), 0);
+function otaMeta() { try { return JSON.parse(fs.readFileSync(path.join(otaDir, 'meta.json'), 'utf8')); } catch (e) { return null; } }
+function otaLaunch() {
+  if (globalThis.__SGB_OTA) { return false; }
+  try {
+    const meta = otaMeta(), bf = path.join(otaDir, 'boot.json');
+    if (!meta || !(meta.rev > BUILD_REV)) { return false; }
+    let boot = {}; try { boot = JSON.parse(fs.readFileSync(bf, 'utf8')); } catch (e) { /* ignore */ }
+    const tries = boot.rev === meta.rev ? boot.tries || 0 : 0;
+    if (tries >= 3) { fs.rmSync(otaDir, { recursive: true, force: true }); return false; }   // فشل 3 مرات: نرجع للمدمج
+    const src = fs.readFileSync(path.join(otaDir, 'engine.js'), 'utf8');
+    if (sha256(src) !== meta.sha) { return false; }
+    fs.writeFileSync(bf, JSON.stringify({ rev: meta.rev, tries: tries + 1 }));
+    globalThis.__SGB_OTA = meta.rev; globalThis.__SGB_BVER = BUILD_VER;
+    setTimeout(() => { try { fs.writeFileSync(bf, JSON.stringify({ rev: meta.rev, tries: 0 })); } catch (e) { /* ignore */ } }, 120000);
+    const Module = require('module'), fn = __filename, m = new Module(fn, module.parent);
+    m.filename = fn; m.paths = Module._nodeModulePaths(__dirname); m._compile(src, fn);
+    return true;
+  } catch (e) { globalThis.__SGB_OTA = undefined; return false; }
+}
+if (otaLaunch()) { return; }
+async function otaCheck() {
+  try {
+    const r = await fetch(OTA_URL + 'ota.json?_t=' + Date.now(), { cache: 'no-store', signal: AbortSignal.timeout(20000) });
+    if (!r.ok) return;
+    const j = await r.json();
+    if (verNum(j.min) > verNum(BUILD_VER)) { return; }   // يحتاج APK كامل (الواجهة تنبّه المستخدم)
+    const cur = Math.max(BUILD_REV, (otaMeta() || {}).rev || 0, globalThis.__SGB_OTA || 0);
+    if (!j.rev || j.rev <= cur) return;
+    const fr = await fetch(OTA_URL + 'mobile-engine.js?_t=' + j.rev, { cache: 'no-store', signal: AbortSignal.timeout(60000) });
+    if (!fr.ok) return;
+    const buf = Buffer.from(await fr.arrayBuffer());
+    if (sha256(buf) !== j.mobile_sha) return;
+    fs.mkdirSync(otaDir, { recursive: true });
+    fs.writeFileSync(path.join(otaDir, 'engine.js.tmp'), buf); fs.renameSync(path.join(otaDir, 'engine.js.tmp'), path.join(otaDir, 'engine.js'));
+    fs.writeFileSync(path.join(otaDir, 'meta.json'), JSON.stringify({ rev: j.rev, sha: j.mobile_sha }));   // يُطبَّق عند فتح التطبيق/المحرك المرة الجاية
+  } catch (e) { /* بدون إنترنت */ }
+}
+setTimeout(otaCheck, 20000); setInterval(otaCheck, 30 * 60 * 1000);
+
 let cfg = { site: '', key: '', channels: { students: true, staff: true }, linked: {} };
 try { cfg = Object.assign(cfg, JSON.parse(fs.readFileSync(cfgPath, 'utf8'))); } catch (e) { /* أول تشغيل */ }
 cfg.linked = cfg.linked || {}; cfg.channels = Object.assign({ students: true, staff: true }, cfg.channels || {});
