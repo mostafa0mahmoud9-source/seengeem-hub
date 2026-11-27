@@ -63,8 +63,8 @@ function sgb_pull($req) {
         $g = isset($g[$ch]) ? (array) $g[$ch] : array();
         if (sgb_desktop_alive($ch)) { return array(); }
     }
-    // رسائل علقت في حالة «جاري الإرسال» أكثر من 10 دقائق تعود للطابور
-    $wpdb->query($wpdb->prepare("UPDATE $t SET status='qr_pending' WHERE status='sending' AND channel=%s AND next_try<%d", $ch, time() - 2700));   // 45 دقيقة (الدفعة قد تطول بسبب فواصل الحماية)
+    // رسالة سُلِّمت للبرنامج ولم يصل تأكيدها خلال 45 دقيقة: لا نعيدها للطابور أبدًا (قد تكون أُرسلت فعلًا) — نعلّمها «فشلت/غير مؤكدة» منعًا للتكرار
+    $wpdb->query($wpdb->prepare("UPDATE $t SET status='failed', error=%s WHERE status='sending' AND channel=%s AND next_try<%d", 'لم يصل تأكيد الإرسال (لم تُعَد تلقائيًا لمنع التكرار)', $ch, time() - 2700));
     $midnight = (new DateTime('today', sgb_tz()))->getTimestamp();
     $done = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM $t WHERE channel=%s AND ((sent_at>=%d AND status IN ('sent','delivered','read')) OR status='sending')", $ch, $midnight));
@@ -89,7 +89,14 @@ function sgb_pull($req) {
             $wpdb->update($t, array('status' => 'cancelled', 'error' => 'مكررة (أُرسلت قبل كده)'), array('id' => $r->id));
             continue;
         }
-        $wpdb->update($t, array('status' => 'sending', 'next_try' => time()), array('id' => $r->id));
+        // لا نكرر نفس النص لنفس الرقم حتى لو الأولى لسه «جاري الإرسال»
+        if ($wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND body=%s AND id<>%d AND status='sending' LIMIT 1", $r->to_phone, $r->body, $r->id))) {
+            $wpdb->update($t, array('status' => 'cancelled', 'error' => 'مكررة (قيد الإرسال)'), array('id' => $r->id));
+            continue;
+        }
+        // حجز ذري: لو سحبها طلب آخر في نفس اللحظة نتجاهلها
+        $claimed = $wpdb->query($wpdb->prepare("UPDATE $t SET status='sending', next_try=%d WHERE id=%d AND status='qr_pending'", time(), $r->id));
+        if ($claimed !== 1) { continue; }
         $out[] = array('id' => $r->id, 'to_phone' => $r->to_phone, 'body' => $r->body);
     }
     return $out;

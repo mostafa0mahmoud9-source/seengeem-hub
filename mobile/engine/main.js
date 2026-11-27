@@ -142,6 +142,30 @@ async function startChannel(ch) {
 function restartLater(ch, gen, ms) { setTimeout(async () => { if (!RT[ch] || RT[ch].gen !== gen) return; await stopChannel(ch); if (cfg.channels[ch] !== false) startChannel(ch); }, ms || 20000); }
 async function stopChannel(ch) { const r = RT[ch]; if (r) { r.gen++; const c = r.client; r.client = null; if (c) { try { c.end(undefined); } catch (e) { /* ignore */ } } } }
 
+
+/** سجل دائم على الجهاز لما اتبعت فعلًا: يمنع أي تكرار حتى لو الموقع سلّم نفس الرسالة تاني. */
+let LEDGER = null, ledgerPath = '';
+function ledgerLoad() {
+  if (LEDGER) return LEDGER;
+  LEDGER = { ids: {}, keys: {} };
+  try { ledgerPath = path.join(base, 'sent-ledger.json'); LEDGER = Object.assign(LEDGER, JSON.parse(fs.readFileSync(ledgerPath, 'utf8'))); } catch (e) { /* أول مرة */ }
+  return LEDGER;
+}
+function ledgerKey(it) { return digits(it.to_phone) + ':' + require('crypto').createHash('sha1').update(String(it.body || '')).digest('hex'); }
+function ledgerSeen(it) {
+  const L = ledgerLoad(), now = Date.now();
+  if (L.ids[it.id] && now - L.ids[it.id] < 14 * 86400000) return true;
+  const k = L.keys[ledgerKey(it)];
+  return !!(k && now - k < 3 * 86400000);
+}
+function ledgerAdd(it) {
+  const L = ledgerLoad(), now = Date.now();
+  L.ids[it.id] = now; L.keys[ledgerKey(it)] = now;
+  for (const m of ['ids', 'keys']) { for (const k of Object.keys(L[m])) { if (now - L[m][k] > 14 * 86400000) delete L[m][k]; } }
+  try { fs.writeFileSync(ledgerPath, JSON.stringify(L)); } catch (e) { /* ignore */ }
+}
+const INFLIGHT = {};   // id -> وقت البدء (يمنع حلقتين من إرسال نفس الرسالة معًا)
+
 const ACKQ = [];
 async function ackSent(id, wa) {
   for (let i = 0; i < 4; i++) {
@@ -163,6 +187,9 @@ async function loop(ch, gen) {
         await flushAcks();
         const items = await api('pull?channel=' + ch + '&src=mobile');
         for (const it of items) {
+          if (INFLIGHT[it.id] && Date.now() - INFLIGHT[it.id] < 600000) { continue; }
+          if (ledgerSeen(it)) { await ackSent(it.id, null); continue; }   // اتبعتت قبل كده: نؤكد للموقع ولا نرسل تاني
+          INFLIGHT[it.id] = Date.now();
           if (!RT[ch] || RT[ch].gen !== gen || !RT[ch].client) return;
           const sock = RT[ch].client, ph = phaseOf(ch);
           try {
@@ -170,7 +197,7 @@ async function loop(ch, gen) {
             if (!hit || !hit.exists) throw new Error('الرقم غير مسجل على واتساب');
             try { await sock.presenceSubscribe(hit.jid); await sock.sendPresenceUpdate('composing', hit.jid); await sleep(rnd(1500, 4000)); await sock.sendPresenceUpdate('paused', hit.jid); } catch (e) { /* optional */ }
             const msg = await sock.sendMessage(hit.jid, { text: it.body });
-            sentRun++; fails = 0;
+            sentRun++; fails = 0; ledgerAdd(it);
             await ackSent(it.id, msg && msg.key && msg.key.id);
           } catch (e) {
             const m = String(e && e.message || e); if (m.indexOf('غير مسجل') < 0) fails++;
