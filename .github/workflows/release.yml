@@ -66,17 +66,19 @@ jobs:
           npx cap add android
           sed -i 's/minSdkVersion = 2[0-9]/minSdkVersion = 24/' android/variables.gradle
           echo "org.gradle.jvmargs=-Xmx3g" >> android/gradle.properties
-          cp ../desktop/assets/brand.png $RUNNER_TEMP/logo.png && {
-            R=android/app/src/main/res
-            IM=$(command -v magick || command -v convert)
-            for spec in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
-              IFS=: read d s f <<< "$spec"; g=$((f*2/3))
-              $IM $RUNNER_TEMP/logo.png -resize ${s}x${s} $R/mipmap-$d/ic_launcher.png
-              $IM $RUNNER_TEMP/logo.png -resize ${s}x${s} $R/mipmap-$d/ic_launcher_round.png
-              $IM $RUNNER_TEMP/logo.png -resize ${g}x${g} -background none -gravity center -extent ${f}x${f} $R/mipmap-$d/ic_launcher_foreground.png
-            done
-            sed -i 's/#FFFFFF/#6a3dc0/I' $R/values/ic_launcher_background.xml
-          } || { echo "فشل ضبط أيقونة الأندرويد"; exit 1; }
+          cp ../desktop/assets/brand.png $RUNNER_TEMP/logo.png
+          command -v magick >/dev/null 2>&1 || command -v convert >/dev/null 2>&1 || { sudo apt-get update -y >/dev/null 2>&1; sudo apt-get install -y imagemagick >/dev/null 2>&1; }
+          IM=$(command -v magick || command -v convert)
+          [ -n "$IM" ] || { echo "ImageMagick غير متوفر"; exit 1; }
+          R=android/app/src/main/res
+          for spec in mdpi:48:108 hdpi:72:162 xhdpi:96:216 xxhdpi:144:324 xxxhdpi:192:432; do
+            IFS=: read d s f <<< "$spec"; g=$((f*2/3))
+            $IM $RUNNER_TEMP/logo.png -resize ${s}x${s} $R/mipmap-$d/ic_launcher.png
+            $IM $RUNNER_TEMP/logo.png -resize ${s}x${s} $R/mipmap-$d/ic_launcher_round.png
+            $IM $RUNNER_TEMP/logo.png -resize ${g}x${g} -background none -gravity center -extent ${f}x${f} $R/mipmap-$d/ic_launcher_foreground.png
+          done
+          sed -i 's/#FFFFFF/#6a3dc0/I' $R/values/ic_launcher_background.xml || true
+          ls -la $R/mipmap-xxxhdpi/
           npx cap sync android
           python3 scripts/patch-android.py android
           sed -i "s/versionCode 1/versionCode ${GITHUB_RUN_NUMBER}/; s/versionName \"1.0\"/versionName \"${V}\"/" android/app/build.gradle
