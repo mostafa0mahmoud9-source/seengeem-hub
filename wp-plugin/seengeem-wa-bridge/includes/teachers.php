@@ -35,7 +35,7 @@ function sgb_tm_text($key, $vars) {
     $t = (isset($ro[$key]['text']) && trim((string) $ro[$key]['text']) !== '') ? $ro[$key]['text'] : $d[$key];
     $out = sgb_render($t, $vars);
     if (function_exists('sgb_eng_spin')) { $out = sgb_eng_spin($out); }
-    $out = preg_replace('/أستاذ\s+(?:مستر|ميستر|أستاذ|استاذ|الأستاذ|أ\.?)\s+/u', 'أستاذ ', $out);
+    $out = preg_replace('/(?:الأستاذ|الاستاذ|أستاذ|استاذ)\s+(?=(?:مستر|مس|دكتور|دكتورة|بشمهندس|بشمهندسة|أستاذ|أستاذة)\s)/u', '', $out);
     return $out;
 }
 
@@ -154,7 +154,7 @@ function sgb_tm_plan($cfg = null) {
     foreach ($T as $uid => $t) { $T[$uid]['excl'] = isset($X[$uid]) ? $X[$uid] : ''; }
     foreach ($T as $uid => $t) {
         if ($t['excl'] === 'full') { continue; }
-        $v = array('name' => $t['name'], 'site' => home_url('/'), 'app' => home_url('/app'));
+        $v = array('name' => function_exists('sgb_eng_two') ? 'مستر ' . sgb_eng_two($t['name']) : $t['name'], 'site' => home_url('/'), 'app' => home_url('/app'));
         $items = array();
         if (in_array('inactive', $t['flags'], true)) { $items['tch_inactive'] = $v + array('days' => $t['login_days']); }
         if ($cfg['cadence_msg'] && in_array('cadence', $t['flags'], true)) { $items['tch_cadence'] = $v + array('courses' => sgb_tm_join(array_map(function ($c) { return $c['title'] . ' (' . $c['done'] . '/' . $c['need'] . ')'; }, $t['late_courses']))); }

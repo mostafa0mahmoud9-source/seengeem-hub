@@ -171,6 +171,52 @@ function sgb_eng_first($n, $fallback) {
     $w = explode(' ', $n);
     return ($w[0] !== '' && !preg_match('/^\d+$/', $w[0]) && mb_strlen($w[0]) <= 15) ? $w[0] : $fallback;
 }
+
+/* ───────── ألقاب الخطاب (مستر / مس / أستاذ / دكتور ...) ───────── */
+function sgb_eng_two($n) {   // الاسم الثنائي (أول كلمتين)
+    $n = trim(preg_replace('/\s+/u', ' ', (string) $n));
+    $n = preg_replace('/^(أ\.?|د\.?|الأستاذ[ةه]?|أستاذ[ةه]?|الدكتور[ة]?|دكتور[ة]?|مستر|ميستر|مس|م\.?)\s+/u', '', $n);
+    $w = array_values(array_filter(explode(' ', $n), function ($x) { return $x !== '' && !preg_match('/^\d+$/', $x); }));
+    return implode(' ', array_slice($w, 0, 2));
+}
+function sgb_eng_is_female($first, $uid = 0) {
+    if ($uid) {
+        foreach (array('sg_gender', 'gender', 'billing_gender', 'sg_sex') as $k) {
+            $g = mb_strtolower(trim((string) get_user_meta($uid, $k, true)));
+            if ($g === '') { continue; }
+            if (preg_match('/^(f|female|أنثى|انثى|بنت|ست|امرأة|إناث|مس)/u', $g)) { return true; }
+            if (preg_match('/^(m|male|ذكر|ولد|رجل|أستاذ|استاذ|مستر)/u', $g)) { return false; }
+        }
+    }
+    $f = trim((string) $first);
+    if ($f === '') { return false; }
+    $male = array('أسامه', 'اسامه', 'حمزه', 'معاويه', 'عبده', 'مصطفى', 'موسى', 'عيسى', 'يحيى', 'مرتضى', 'زكريا', 'طلحه', 'عكاشه', 'قتيبه', 'أبو', 'ابو', 'عمده');
+    if (in_array($f, $male, true) || in_array(str_replace('ة', 'ه', $f), $male, true)) { return false; }
+    if (preg_match('/[ةه]$/u', $f)) { return true; }
+    if (preg_match('/(اء|ى)$/u', $f)) { return true; }
+    $fem = array('منى', 'هدى', 'سلمى', 'سلوى', 'نهى', 'ندى', 'رحاب', 'رضوى', 'نجوى', 'ريم', 'مريم', 'سمر', 'سناء', 'إيمان', 'ايمان', 'سحر', 'هاجر', 'نور', 'جيهان', 'ميرفت', 'داليا', 'دينا', 'ليلى', 'لبنى', 'رانيا', 'هبة', 'ياسمين', 'شروق', 'غادة', 'عبير', 'نيفين', 'ناهد', 'سعاد', 'وفاء', 'أمل', 'امل', 'آمال', 'سارة', 'منار', 'روان', 'جنى', 'لمياء', 'ولاء', 'سهير', 'ناديه', 'هالة', 'مروه', 'ملك', 'حنان', 'فرح', 'سندس', 'بسمه', 'رشا', 'شهد', 'تسنيم', 'جميله', 'زينب', 'خديجه', 'عائشه', 'حبيبه', 'رحمه', 'مي', 'ميار', 'ميادة', 'ريهام', 'ريفان', 'سميره', 'نعمات', 'نعمه', 'كريمان', 'سوزان', 'سامية', 'ابتسام', 'انتصار', 'اعتماد', 'اجلال', 'إجلال', 'إخلاص', 'اخلاص', 'إلهام', 'الهام', 'ألفت', 'الفت', 'أميمه', 'اميمه', 'نادين', 'جيداء', 'هند', 'سلمي', 'منال', 'نسمه', 'نسمة', 'أروى', 'اروى', 'سماح', 'نرمين', 'إسراء', 'اسراء', 'نجلاء', 'شيرين', 'ولاء', 'علا', 'عبلة', 'دعاء', 'رباب', 'وسام', 'ضحى', 'أسماء', 'اسماء');
+    return in_array($f, $fem, true);
+}
+/** لقب ولي الأمر من الوظيفة المسجلة؛ لو غير موجودة: أستاذ/أستاذة بحسب الاسم. */
+function sgb_eng_parent_title($uid, $first) {
+    $fem = sgb_eng_is_female($first);
+    $job = '';
+    foreach (array('sg_parent_job', 'sg_parent_occupation', 'sg_parent_work', 'sg_parent_profession', 'parent_job', 'parent_occupation', 'parent_work') as $k) {
+        $v = trim((string) get_user_meta($uid, $k, true));
+        if ($v !== '') { $job = $v; break; }
+    }
+    if ($job !== '') {
+        if (preg_match('/دكتور|دكتوره|طبيب|طبيبة|طبيبه|صيدل|بيطر|أسنان|اسنان|جراح|أخصائي|اخصائي|doctor|dr\b|pharm|dent/iu', $job)) { return $fem ? 'دكتورة' : 'دكتور'; }
+        if (preg_match('/مهندس|هندسة|هندسه|بشمهندس|engineer/iu', $job)) { return $fem ? 'بشمهندسة' : 'بشمهندس'; }
+        if (preg_match('/مدرس|معلم|مدرسة|مدرسه|teacher|أستاذ جامعي|استاذ جامعي|محاضر/iu', $job)) { return $fem ? 'مس' : 'مستر'; }
+    }
+    return $fem ? 'أستاذة' : 'أستاذ';
+}
+function sgb_eng_titled($aud, $uid, $display_name, $first) {
+    if ($aud === 'teachers') { $nm = sgb_eng_two($display_name); return 'مستر' . ($nm !== '' ? ' ' . $nm : ''); }
+    if ($aud === 'employees') { $f = sgb_eng_is_female($first, $uid); return ($f ? 'مس' : 'أستاذ') . ($first !== '' ? ' ' . $first : ''); }
+    return $first;
+}
 function sgb_eng_user_phone($uid, $u = null) {
     $p = sgb_tm_phone_of($uid);
     if (!$p) { $u = $u ? $u : get_userdata($uid); if ($u) { $p = sgb_phone($u->user_login); } }
@@ -202,7 +248,9 @@ function sgb_eng_recipients($auds, $grades = array()) {
         if (!in_array($a, $auds, true)) { continue; }
         foreach (get_users(array('role__in' => sgb_eng_roles($a), 'fields' => 'all', 'number' => 2000)) as $u) {
             if ($a === 'employees' && array_intersect((array) $u->roles, array('sg_teacher', 'tutor_instructor')) && in_array('teachers', $auds, true)) { continue; }
-            $add(sgb_eng_user_phone($u->ID, $u), sgb_eng_first($u->display_name ? $u->display_name : $u->first_name, 'أستاذنا'), '', 'staff', $u->ID, $a);
+            $rawn = $u->display_name ? $u->display_name : $u->first_name;
+            $fn = sgb_eng_first($rawn, '');
+            $add(sgb_eng_user_phone($u->ID, $u), sgb_eng_titled($a, $u->ID, $rawn, $fn), '', 'staff', $u->ID, $a);
         }
     }
     if (in_array('students', $auds, true) || in_array('parents', $auds, true)) {
@@ -213,13 +261,14 @@ function sgb_eng_recipients($auds, $grades = array()) {
             if (in_array('students', $auds, true)) { $add(sgb_eng_user_phone($u->ID, $u), $first, '', 'students', $u->ID, 'students'); }
             if (in_array('parents', $auds, true)) {
                 $pp = sgb_phone((string) get_user_meta($u->ID, 'sg_parent_phone', true));
-                $add($pp, sgb_eng_first(get_user_meta($u->ID, 'sg_parent_name', true), ''), $first, 'students', $u->ID, 'parents');
+                $pfirst = sgb_eng_first(get_user_meta($u->ID, 'sg_parent_name', true), '');
+                $add($pp, sgb_eng_parent_title($u->ID, $pfirst) . ($pfirst !== '' ? ' ' . $pfirst : ''), $first, 'students', $u->ID, 'parents');
             }
         }
     }
     return $out;
 }
-function sgb_eng_fallback_name($aud) { return $aud === 'students' ? 'يا بطل' : ($aud === 'parents' ? 'يا فندم' : ($aud === 'teachers' ? 'أستاذنا' : 'يا فندم')); }
+function sgb_eng_fallback_name($aud) { return $aud === 'students' ? 'يا بطل' : ($aud === 'parents' ? 'يا أستاذ' : ($aud === 'teachers' ? 'مستر' : 'يا أستاذ')); }
 
 /* ───────── توليد النص ───────── */
 function sgb_eng_spin($t) {
@@ -234,7 +283,7 @@ function sgb_eng_fill($t, $r, $extra = array()) {
     $child = $r['child'] !== '' ? $r['child'] : 'ابنكم';
     $t = sgb_render($t, array_merge(array('name' => $name, 'child' => $child, 'parent' => $r['aud'] === 'parents' ? $name : ''), $extra));
     $t = preg_replace('/\bيا\s+يا\s+/u', 'يا ', $t);
-    $t = preg_replace('/أستاذ\s+(?:مستر|ميستر|أستاذ|استاذ|الأستاذ|أ\.?)\s+/u', 'أستاذ ', $t);
+    $t = preg_replace('/(?:الأستاذ|الاستاذ|أستاذ|استاذ)\s+(?=(?:مستر|مس|دكتور|دكتورة|بشمهندس|بشمهندسة|أستاذ|أستاذة)\s)/u', '', $t);   // لا نكرر اللقب
     $t = str_replace('أستاذ أستاذنا', 'أستاذنا', $t);
     return trim(preg_replace("/[ \t]{2,}/u", ' ', $t));
 }
