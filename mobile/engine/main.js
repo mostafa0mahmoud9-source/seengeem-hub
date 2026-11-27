@@ -60,7 +60,18 @@ function phaseOf(ch) { const t = cfg.linked[ch]; const d = t ? (Date.now() - t) 
 
 async function startChannel(ch) {
   if (cfg.channels[ch] === false || (RT[ch] && RT[ch].client)) return;
-  if (!WW) { try { WW = require('@whiskeysockets/baileys'); } catch (e) { wlog('require: ' + e.message); setState(ch, { state: 'error', error: 'تعذر تحميل مكتبة واتساب: ' + String(e.message).slice(0, 120) }); return; } }
+  if (!WW) {
+    let e1 = null;
+    try { if (!globalThis.crypto) { globalThis.crypto = require('crypto').webcrypto; } } catch (e) { /* ignore */ }
+    try { WW = require('@whiskeysockets/baileys'); } catch (e) { e1 = e; }
+    if (!WW) { try { WW = await import('@whiskeysockets/baileys'); } catch (e2) {
+      const m = String((e1 && e1.message) || e1) + ' | ' + String(e2 && e2.message || e2);
+      wlog('load: ' + m);
+      setState(ch, { state: 'error', error: 'تعذر تحميل مكتبة واتساب (سيعاد المحاولة): ' + m.slice(0, 300) });
+      setTimeout(() => startChannel(ch), 30000);
+      return;
+    } }
+  }
   if (!QRCode) { try { QRCode = require('qrcode'); } catch (e) { /* ignore */ } }
   const gen = ((RT[ch] && RT[ch].gen) || 0) + 1; const pairPhone = RT[ch] && RT[ch].pairPhone;
   RT[ch] = { client: null, gen, pairPhone };
