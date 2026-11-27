@@ -1,0 +1,25 @@
+/* تنسيق موحّد لصفحات «منصة سين جيم» (sgp-*) — عرض كامل، شبكة منتظمة، كروت متناسقة */
+body[class*="_page_sgp-"] #wpcontent{padding-left:18px!important;padding-right:18px!important}
+body[class*="_page_sgp-"] .sgp-wrap{max-width:none!important;width:auto!important;margin:14px 0 48px!important}
+body[class*="_page_sgp-"] .sgp-wrap>h1.sgp-title{display:flex!important;align-items:center;justify-content:space-between;gap:14px;font-size:24px;font-weight:800;line-height:1.3;margin:4px 0 6px!important;padding:0 14px 0 0;border-right:4px solid #7c3aed}
+body[class*="_page_sgp-"] .sgp-lead{margin:0 0 18px!important;color:#6b6585;font-size:13.5px}
+body[class*="_page_sgp-"] .sgp-stats{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(190px,1fr))!important;gap:14px!important;margin:0 0 18px!important}
+body[class*="_page_sgp-"] .sgp-stat{margin:0!important;width:auto!important;min-height:92px;padding:16px 14px!important;background:#fff!important;border:1px solid #ece8f6!important;border-radius:14px!important;box-shadow:0 1px 3px rgba(60,30,120,.07)!important;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center}
+body[class*="_page_sgp-"] .sgp-stat-v{font-size:28px!important;line-height:1.2}
+body[class*="_page_sgp-"] .sgp-stat-l{font-size:13px!important;color:#6b6585!important;margin-top:4px}
+body[class*="_page_sgp-"] .sgp-panel,body[class*="_page_sgp-"] .sgp-wrap>details,body[class*="_page_sgp-"] .sgp-wrap>div.sgp-panel{width:auto!important;max-width:none!important;margin:0 0 18px!important;padding:18px 20px!important;background:#fff!important;border:1px solid #ece8f6!important;border-radius:14px!important;box-shadow:0 1px 3px rgba(60,30,120,.07)!important;box-sizing:border-box}
+body[class*="_page_sgp-"] .sgp-panel h2{font-size:16px!important;font-weight:700;margin:0 0 12px!important;padding:0}
+body[class*="_page_sgp-"] .sgp-quick{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(160px,1fr))!important;gap:12px!important;margin:0 0 18px!important}
+body[class*="_page_sgp-"] .sgp-quick>a{display:flex!important;align-items:center;justify-content:center;gap:8px;min-height:56px;margin:0!important;padding:10px 14px!important;background:#fff!important;border:1px solid #e3dcf5!important;border-radius:12px!important;box-shadow:0 1px 2px rgba(60,30,120,.06);text-align:center;line-height:1.35;transition:.15s}
+body[class*="_page_sgp-"] .sgp-quick>a:hover{border-color:#7c3aed!important;box-shadow:0 3px 10px rgba(124,58,237,.15);transform:translateY(-1px)}
+body[class*="_page_sgp-"] .sgp-home-2{display:grid!important;grid-template-columns:minmax(0,1fr)!important;gap:18px!important;align-items:start;margin:0 0 18px!important}
+body[class*="_page_sgp-"] .sgp-home-2>.sgp-panel,body[class*="_page_sgp-"] .sgp-home-2 .sgp-grid-2>.sgp-panel{margin:0!important;height:100%}
+body[class*="_page_sgp-"] .sgp-grid-2{display:grid!important;gap:18px!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;align-items:start}
+body[class*="_page_sgp-"] .sgp-fu-tiles{display:grid!important;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))!important;gap:12px!important}
+body[class*="_page_sgp-"] .sgp-fu-tile{width:auto!important;margin:0!important;box-sizing:border-box}
+body[class*="_page_sgp-"] .sgp-fu-home{grid-column:1/-1}
+@media (max-width:1100px){body[class*="_page_sgp-"] .sgp-grid-2{grid-template-columns:minmax(0,1fr)!important}}
+body[class*="_page_sgp-"] .sgp-inbox-h{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+body[class*="_page_sgp-"] .sgp-log-item{padding:8px 0;border-bottom:1px solid #f1eef9}
+body[class*="_page_sgp-"] .sgp-log-item:last-child{border-bottom:0}
+body[class*="_page_sgp-"] table.widefat,body[class*="_page_sgp-"] table.wp-list-table{border-radius:12px;overflow:hidden;border:1px solid #ece8f6;box-shadow:none}
