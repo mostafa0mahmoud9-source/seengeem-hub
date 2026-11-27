@@ -82,13 +82,14 @@ iframe{width:100%;height:75vh;border:0;border-radius:12px;background:#fff}
   </div>
   <div id="mlog">
     <div class="card">
+      <div id="msum" style="margin-bottom:10px;line-height:1.9"></div>
       <div class="chips" id="chips"></div>
       <input id="q" placeholder="ابحث برقم أو بنص الرسالة..." oninput="msearch()">
       <div id="mlist"></div>
     </div>
     <button class="btn alt" onclick="retryAll()">🔁 إعادة محاولة الرسائل الفاشلة</button>
   </div>
-  <div id="mq" style="display:none"><div class="card"><h3>الرسائل المنتظرة</h3><p class="muted">عدّل نص رسالة قبل ما تتبعت، أو ألغِها. التعديل هنا على الرسالة دي بس.</p><div id="qlist"></div></div></div>
+  <div id="mq" style="display:none"><div class="card"><h3>الرسائل المنتظرة <span id="qcnt"></span></h3><p class="muted">عدّل نص رسالة قبل ما تتبعت، أو ألغِها. التعديل هنا على الرسالة دي بس.</p><div id="qlist"></div></div></div>
   <div id="mr" style="display:none"><div class="card"><h3>أنواع الرسائل</h3><p class="muted">عدّل نص أي نوع بشكل دائم (يسري على الرسائل الجاية)، أو أوقف النوع كله. استخدم المتغيرات بين أقواس مثل {name}.</p><div id="rlist"></div></div></div>
 </section>
 
@@ -246,10 +247,12 @@ function loadMsgs(reset){if(!S.url||!S.key||MS.busy)return;MS.busy=true;
   api(qs).then(function(j){MS.busy=false;MS.ok=true;MS.rows=reset?j.rows:MS.rows.concat(j.rows);MS.more=j.more;renderMsgs()}).catch(function(e){MS.busy=false;$('mlist').innerHTML='<p class="bad">'+esc(fmtErr(e))+'</p>'})}
 function fmtT(r){var t=r.sent_at&&+r.sent_at?+r.sent_at:+r.created;return new Date(t*1000).toLocaleString('ar-EG',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'})}
 function toggleMsg(el){var d=el.querySelector('.full');if(d)d.style.display=d.style.display==='block'?'none':'block'}
-function renderMsgs(){$('chips').innerHTML=Object.keys(FN).map(function(k){return '<button class="chip'+(k===F?' on':'')+'" onclick="setF(\''+k+'\')">'+FN[k]+'</button>'}).join('');
+function fcount(k){if(!D)return '';var m={all:['queued','sending','qr_pending','sent','delivered','read','failed','cancelled'],wait:['queued','sending','qr_pending'],done:['sent','delivered','read'],ok:['delivered','read'],bad:['failed'],skip:['cancelled']};return ' ('+cnt(m[k])+')'}
+function renderMsgs(){$('chips').innerHTML=Object.keys(FN).map(function(k){return '<button class="chip'+(k===F?' on':'')+'" onclick="setF(\''+k+'\')">'+FN[k]+fcount(k)+'</button>'}).join('');
+  if(D&&$('msum'))$('msum').innerHTML='✅ أُرسلت: <b>'+cnt(['sent','delivered','read'])+'</b> &nbsp;·&nbsp; ⏳ منتظرة: <b>'+cnt(['queued','sending','qr_pending'])+'</b> &nbsp;·&nbsp; ❌ فشلت: <b>'+cnt(['failed'])+'</b> &nbsp;·&nbsp; اليوم: <b>'+D.sent_today+'</b>';
   if(!D){$('mlist').innerHTML='<p class="muted">لا توجد بيانات</p>';return}
   if(!MS.ok&&!MS.busy){loadMsgs(true)}
-  $('mlist').innerHTML=MS.rows.map(function(r){return '<div class="row" onclick="toggleMsg(this)" style="cursor:pointer"><div><b>'+esc(r.to_phone)+'</b> · '+CH[r.channel]+(r.rule_key?' · '+esc(RULE[r.rule_key]||r.rule_key):'')+'<div class="muted">'+fmtT(r)+'</div><div class="muted">'+esc((r.body||'').slice(0,110))+'</div><div class="full muted" style="display:none;white-space:pre-wrap;margin-top:6px">'+esc(r.body||'')+'</div>'+(r.error?'<div class="bad" style="font-size:13px">'+esc(r.error)+'</div>':'')+'</div><span class="b s-'+r.status+'">'+(ST[r.status]||r.status)+'</span></div>'}).join('')||'<p class="muted">لا توجد رسائل</p>';
+  $('mlist').innerHTML=MS.rows.map(function(r){return '<div class="row"><div style="min-width:0;flex:1"><b>'+esc(r.to_phone)+'</b> · '+CH[r.channel]+(r.rule_key?' · '+esc(RULE[r.rule_key]||r.rule_key):'')+'<div class="muted">'+fmtT(r)+'</div><div style="white-space:pre-wrap;margin-top:6px;line-height:1.7;font-size:14px;background:rgba(255,255,255,.05);border-radius:8px;padding:8px">'+esc(r.body||'')+'</div>'+(r.error?'<div class="bad" style="font-size:13px">'+esc(r.error)+'</div>':'')+'</div><span class="b s-'+r.status+'">'+(ST[r.status]||r.status)+'</span></div>'}).join('')||'<p class="muted">لا توجد رسائل</p>';
   if(MS.more)$('mlist').innerHTML+='<button class="btn alt" onclick="loadMsgs(false)">تحميل المزيد</button>'}
 function renderReplies(){$('ilist').innerHTML=D?(D.incoming.map(function(r){return '<div class="row"><div><b>'+esc(r.from_phone)+'</b> · '+CH[r.channel]+'<div class="muted">'+esc(r.body)+'</div></div><span class="muted">'+new Date(r.created*1000).toLocaleString('ar-EG')+'</span></div>'}).join('')||'<p class="muted">لا توجد ردود لسه</p>'):''}
 function renderProt(){var im=R.import,dg=R.digest||{},lb=R.last_backup;
@@ -300,6 +303,7 @@ function setMV(m){MV=m;['log','q','r'].forEach(function(x){$('m'+x).style.displa
 function loadQueue(){$('qlist').innerHTML='<p class="muted">جاري التحميل...</p>';
   api('queue').then(function(r){QUEUE=r.queue||[];renderQueue()}).catch(function(e){$('qlist').innerHTML='<p class="bad">'+esc(fmtErr(e))+'</p>'})}
 function renderQueue(){
+  if($('qcnt'))$('qcnt').textContent='('+QUEUE.length+')';
   $('qlist').innerHTML=QUEUE.length?QUEUE.map(function(r,i){return '<div style="border-bottom:1px solid var(--line);padding:10px 0"><b>'+esc(r.to_phone)+'</b> · '+CH[r.channel]+(r.rule_key?' · '+esc(RULE[r.rule_key]||r.rule_key):'')+
     '<textarea id="qb'+i+'" rows="3">'+esc(r.body)+'</textarea><button class="btn" onclick="qSave('+i+')">حفظ التعديل</button> <button class="btn red" onclick="qCancel('+i+')">إلغاء الرسالة</button></div>'}).join(''):'<p class="muted">لا توجد رسائل منتظرة الآن.</p>'}
 function qSave(i){post('queue-edit',{id:QUEUE[i].id,body:$('qb'+i).value}).then(function(){toast('تم تعديل الرسالة');loadQueue()}).catch(function(e){toast(fmtErr(e));loadQueue()})}
