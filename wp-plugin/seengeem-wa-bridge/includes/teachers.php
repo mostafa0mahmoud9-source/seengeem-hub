@@ -147,7 +147,10 @@ function sgb_tm_plan($cfg = null) {
     $log = (array) get_option('sgb_tm_log', array());
     $now = time(); $date = wp_date('Y-m-d');
     $out = array(); $lines = array(); $esc = array();
+    $X = (array) get_option('sgb_tm_excl', array());
+    foreach ($T as $uid => $t) { $T[$uid]['excl'] = isset($X[$uid]) ? $X[$uid] : ''; }
     foreach ($T as $uid => $t) {
+        if ($t['excl'] === 'full') { continue; }
         $v = array('name' => $t['name']);
         $items = array();
         if (in_array('inactive', $t['flags'], true)) { $items['tch_inactive'] = $v + array('days' => $t['login_days']); }
@@ -155,6 +158,7 @@ function sgb_tm_plan($cfg = null) {
         if ($t['qa'] > 0) { $items['tch_qa'] = $v + array('count' => $t['qa'], 'hours' => (int) floor($t['qa_oldest'] / 3600), 'courses' => sgb_tm_join($t['qa_titles'])); }
         if ($t['drafts'] > 0) { $items['tch_drafts'] = $v + array('count' => $t['drafts'], 'days' => $cfg['draft_days'], 'courses' => sgb_tm_join($t['draft_titles'])); }
         if ($t['assign'] > 0) { $items['tch_assign'] = $v + array('count' => $t['assign'], 'hours' => (int) floor($t['assign_oldest'] / 3600)); }
+        if ($t['excl']) { $items = array(); }
         foreach ($items as $rule => $vars) {
             $body = sgb_tm_text($rule, $vars);
             if ($body === '') { continue; }
@@ -171,8 +175,9 @@ function sgb_tm_plan($cfg = null) {
         if ($bits) { $lines[] = '• أ. ' . $t['name'] . ': ' . implode(' | ', $bits); }
         if ($bits && (($t['login_days'] !== null && $t['login_days'] >= 2 * $cfg['inactive_days']) || $t['qa_oldest'] >= $cfg['qa_escalate_hours'] * 3600 || $t['assign_oldest'] >= 2 * $cfg['assign_hours'] * 3600)) { $esc[] = end($lines); }
     }
-    $total = count($T);
-    $ok = $total - count(array_filter($T, function ($x) { return !empty($x['flags']); }));
+    $T2 = array_filter($T, function ($x) { return $x['excl'] !== 'full'; });
+    $total = count($T2);
+    $ok = $total - count(array_filter($T2, function ($x) { return !empty($x['flags']); }));
     $gv = array('date' => $date);
     // متابعو المدرسين: يصلهم المتأخرون الحرجون فقط
     if ($cfg['notify_followers'] && $esc) {
@@ -244,6 +249,14 @@ add_action('rest_api_init', function () {
         if ($p) { $o[$uid] = $p; } else { unset($o[$uid]); }
         update_option('sgb_tm_phones', $o, false);
         return array('ok' => true, 'phone' => $p);
+    }));
+    register_rest_route($ns, '/teach-excl', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
+        $uid = (int) $req->get_param('uid');
+        $mode = (string) $req->get_param('mode');
+        $o = (array) get_option('sgb_tm_excl', array());
+        if ($mode === 'mute' || $mode === 'full') { $o[$uid] = $mode; } else { unset($o[$uid]); }
+        update_option('sgb_tm_excl', $o, false);
+        return array('ok' => true, 'mode' => isset($o[$uid]) ? $o[$uid] : '');
     }));
     register_rest_route($ns, '/teach-run', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
         $uid = (int) $req->get_param('uid');
