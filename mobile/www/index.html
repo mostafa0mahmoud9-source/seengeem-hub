@@ -174,7 +174,7 @@ function go(t){if(t==='teach'&&S.url&&S.key)loadTeach();document.querySelectorAl
 document.querySelectorAll('nav button').forEach(function(b){b.onclick=function(){go(b.dataset.t)}});
 
 function cnt(a){return D.by.filter(function(x){return a.indexOf(x.status)>=0}).reduce(function(s,x){return s+ +x.n},0)}
-function connected(k){var c=D.channels[k];if(c.cloud_ready)return true;var g=D.gw&&D.gw[k];return !!(g&&g.state==='ready'&&(D.time-g.ts)<240)}
+function connected(k){var c=D.channels[k];if(c.cloud_ready)return true;var g=D.gw&&D.gw[k];if(g&&g.state==='ready'&&(D.time-g.ts)<240)return true;var m=D.gw_m&&D.gw_m[k];return !!(m&&m.state==='ready'&&(D.time-m.ts)<240)}
 var DSN={ready:'متصل ✔',qr:'امسح الكود بواتساب الرقم',starting:'جاري التشغيل...',idle:'غير مربوط',disconnected:'انفصل، جاري إعادة الاتصال',error:'خطأ',no_browser:'محتاج Google Chrome أو Edge'};
 function pushCfg(){try{if(window.sgDesktop&&S.url&&S.key)window.sgDesktop.setConfig({site:S.url,key:S.key})}catch(e){}}
 function load(manual){pushCfg();
