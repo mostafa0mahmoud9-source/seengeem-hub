@@ -309,12 +309,13 @@ function loadTeach(){api('teach').then(function(r){TC=r;renderTeach()}).catch(fu
 function dTxt(d,ok){return d===null||d===undefined?'—':(d===0?'اليوم':d+' يوم')}
 function renderTeach(){if(!TC)return;var c=TC.cfg;
   $('tstat').innerHTML='<div class="row"><span><b>الإرسال التلقائي اليومي</b><br><small class="muted">'+(c.enabled?'شغّال: يبعت كل يوم الساعة '+c.send_hour+' صباحًا':'متوقف — راجع المعاينة تحت وبعدين شغّله')+'</small></span><button class="btn '+(c.enabled?'red':'')+'" onclick="teachSet({enabled:'+(c.enabled?0:1)+'})">'+(c.enabled?'إيقاف':'تشغيل')+'</button></div>'+(TC.last_run?'<p class="muted">آخر تشغيل تلقائي: '+esc(TC.last_run)+'</p>':'');
-  $('tlist').innerHTML=TC.teachers.length?TC.teachers.map(function(t){var bad=t.flags.length;
-    return '<div style="border-bottom:1px solid var(--line);padding:10px 0"><div class="row" style="border:0;padding:0"><b>'+esc(t.name)+'</b><span class="'+(bad?'bad':'ok')+'">'+(bad?'يحتاج متابعة':'منتظم ✔')+'</span></div>'+
+  var TL=TC.teachers.slice().sort(function(a,b){return (a.excl==='full'?1:0)-(b.excl==='full'?1:0)});
+  $('tlist').innerHTML=TL.length?TL.map(function(t){var bad=t.flags.length&&t.excl!=='full';
+    return '<div style="border-bottom:1px solid var(--line);padding:10px 0"><div class="row" style="border:0;padding:0"><b>'+esc(t.name)+'</b><span class="'+(t.excl==='full'?'muted':(bad?'bad':'ok'))+'">'+(t.excl==='full'?'مستثنى بالكامل':(bad?'يحتاج متابعة':'منتظم ✔')+(t.excl==='mute'?' · بدون تنبيهات':''))+'</span></div>'+
      '<div class="muted">آخر دخول: '+dTxt(t.login_days)+' | آخر درس: '+dTxt(t.lesson_days)+' | كورسات: '+t.courses+' | دروس الشهر: '+t.done_month+'</div>'+(t.late_courses&&t.late_courses.length?'<div class="bad" style="font-size:13px">كورسات متأخرة: '+t.late_courses.map(function(c){return esc(c.title)+' ('+c.done+'/'+c.need+')'}).join('، ')+'</div>':'')+
      '<div class="muted">أسئلة بلا رد: <b>'+t.qa+'</b> | واجبات بلا تقييم: <b>'+t.assign+'</b> | مسودات: <b>'+t.drafts+'</b></div>'+
      (t.phone?'<div class="muted">📱 '+esc(t.phone)+'</div>':'<div style="display:flex;gap:6px"><input id="tp'+t.uid+'" inputmode="tel" placeholder="رقم واتساب المدرس" style="margin:4px 0"><button class="btn" onclick="teachPhone('+t.uid+')">حفظ</button></div>')+
-     (bad&&t.phone?'<button class="btn alt" onclick="teachRun('+t.uid+')">تنبيه هذا المدرس الآن</button>':'')+'</div>'}).join(''):'<p class="muted">لا يوجد مدرسون.</p>';
+     (bad&&t.phone&&!t.excl?'<button class="btn alt" onclick="teachRun('+t.uid+')">تنبيه هذا المدرس الآن</button> ':'')+(t.excl?'<button class="btn alt" onclick="teachEx('+t.uid+',\'\')">إرجاع للمتابعة</button>':'<button class="btn alt" onclick="teachEx('+t.uid+',\'mute\')">بدون تنبيهات</button> <button class="btn alt" onclick="teachEx('+t.uid+',\'full\')">استثناء كامل</button>')+'</div>'}).join(''):'<p class="muted">لا يوجد مدرسون.</p>';
   $('tplan').innerHTML=TC.plan.length?TC.plan.map(function(m){return '<div class="row"><div><b>'+({teacher:'مدرس',follower:'متابع',manager:'مدير'}[m.role])+' · '+esc(m.who)+'</b> <small class="muted">'+esc(RULE[m.rule]||m.rule)+'</small><div class="muted" style="white-space:pre-wrap">'+esc(m.body)+'</div>'+(m.skip?'<small class="bad">لن تُرسل: '+esc(m.skip)+'</small>':'')+'</div></div>'}).join(''):'<p class="muted">لا توجد تنبيهات مطلوبة الآن 👏</p>';
   $('tcfg').innerHTML=TSPEC.map(function(x){return '<label>'+x[1]+'</label><input id="tc_'+x[0]+'" type="number" value="'+c[x[0]]+'">'}).join('')+
    '<label>رقم مدير المنصة (واتساب)</label><input id="tc_manager_phone" inputmode="tel" value="'+esc(c.manager_phone)+'" placeholder="مثال 01xxxxxxxxx">'+
@@ -325,6 +326,7 @@ function renderTeach(){if(!TC)return;var c=TC.cfg;
    '<button class="btn" onclick="teachSave()">حفظ الإعدادات</button>'+
    '<p class="muted">لتعديل نص أي رسالة: «الرسائل» ثم «أنواع الرسائل».</p>'+
    (TC.comment_types&&TC.comment_types.length?'<details><summary class="muted">معلومات فنية</summary><p class="muted">'+TC.comment_types.map(function(x){return esc(x.t||'comment')+':'+x.n}).join(' · ')+'</p></details>':'')}
+function teachEx(u,m){if(m==='full'&&!confirm('استثناء هذا المدرس بالكامل؟ لن يصله أي تنبيه ولن يظهر في تقرير المدير. تقدر ترجعه في أي وقت.'))return;post('teach-excl',{uid:u,mode:m}).then(function(){toast('تم');loadTeach()}).catch(function(e){toast(fmtErr(e))})}
 function teachSet(b){post('teach-settings',b).then(function(){toast('تم');loadTeach()}).catch(function(e){toast(fmtErr(e))})}
 function teachSave(){var b={};TSPEC.forEach(function(x){b[x[0]]=$('tc_'+x[0]).value});b.manager_phone=$('tc_manager_phone').value;b.follower_phones=$('tc_follower_phones').value;teachSet(b)}
 function teachPhone(u){post('teach-phone',{uid:u,phone:$('tp'+u).value}).then(function(r){toast(r.phone?'تم حفظ الرقم':'رقم غير صالح');loadTeach()}).catch(function(e){toast(fmtErr(e))})}
