@@ -63,11 +63,13 @@ async function startChannel(ch) {
   if (!WW) {
     let e1 = null;
     try { if (!globalThis.crypto) { globalThis.crypto = require('crypto').webcrypto; } } catch (e) { /* ignore */ }
-    try { WW = require('@whiskeysockets/baileys'); } catch (e) { e1 = e; }
-    if (!WW) { try { WW = await import('@whiskeysockets/baileys'); } catch (e2) {
-      const m = String((e1 && e1.message) || e1) + ' | ' + String(e2 && e2.message || e2);
-      wlog('load: ' + m);
-      setState(ch, { state: 'error', error: 'تعذر تحميل مكتبة واتساب (سيعاد المحاولة): ' + m.slice(0, 300) });
+    // النسخ الحديثة من Baileys بصيغة ESM: نستخدم import() أولًا (ثم require كاحتياطي للنسخ القديمة)
+    try { WW = await import('@whiskeysockets/baileys'); } catch (e) { e1 = e; }
+    if (!WW) { try { WW = require('@whiskeysockets/baileys'); } catch (e2) {
+      const m1 = String((e1 && e1.message) || e1).slice(0, 230);
+      const m2 = String((e2 && e2.message) || e2).slice(0, 80);
+      wlog('load import: ' + (e1 && e1.stack || e1) + ' | require: ' + (e2 && e2.message || e2));
+      setState(ch, { state: 'error', error: 'تعذر تحميل مكتبة واتساب (سيعاد المحاولة) [node ' + process.version + ']: ' + m1 + ' | ' + m2 });
       setTimeout(() => startChannel(ch), 30000);
       return;
     } }
