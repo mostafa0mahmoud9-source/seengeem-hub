@@ -80,7 +80,11 @@ function digits(v) { return String(v || '').split('@')[0].split(':')[0].replace(
 async function startChannel(ch) {
   if (cfg.channels[ch] === false) return;
   if (RT[ch] && RT[ch].client) return;
-  if (!WW) { try { WW = require('@whiskeysockets/baileys'); } catch (e) { setState(ch, { state: 'error', error: 'مكتبة واتساب غير مثبتة' }); wlog('require: ' + e.message); return; } }
+  if (!WW) {
+    let e1 = null;
+    try { WW = require('@whiskeysockets/baileys'); } catch (e) { e1 = e; }
+    if (!WW) { try { WW = await import('@whiskeysockets/baileys'); } catch (e2) { const m = String((e1 && e1.message) || e1) + ' | ' + String(e2 && e2.message || e2); wlog('require: ' + m); diag(ch, new Error('load: ' + m)); setState(ch, { state: 'error', error: 'تعذر تحميل مكتبة واتساب: ' + m.slice(0, 160) }); RT[ch] = RT[ch] || { client: null, gen: 0 }; restartLater(ch, RT[ch].gen, 30000); return; } }
+  }
   if (!QRCode) { try { QRCode = require('qrcode'); } catch (e) { /* بدون QR صورة */ } }
   const gen = ((RT[ch] && RT[ch].gen) || 0) + 1;
   const pairPhone = RT[ch] && RT[ch].pairPhone;
