@@ -169,6 +169,7 @@ function sgb_rule_label($k) {
         'lead_welcome' => 'ترحيب بالمسجّل', 'lead_help' => 'مساعدة الاشتراك', 'lead_offer' => 'عرض أول اشتراك', 'inactive' => 'غياب', 'unwatched' => 'درس لم يُبدأ',
         'incomplete' => 'درس لم يكتمل', 'quiz_due' => 'امتحان لم يُحل', 'low_score' => 'دعم بعد نتيجة ضعيفة', 'parent_followup' => 'متابعة ولي الأمر', 'weekly' => 'تقرير أسبوعي',
         'shoot_24' => 'تذكير تصوير 24س', 'shoot_2' => 'تذكير تصوير ساعتين', 'teacher_late' => 'تأخير تصوير', 'motivation' => 'تشجيع', 'manual' => 'يدوي');
+    if (!isset($m[$k]) && function_exists('sgb_jr_labels')) { $jl = sgb_jr_labels(); if (isset($jl[$k])) { return $jl[$k]; } }
     return isset($m[$k]) ? $m[$k] : $k;
 }
 function sgb_send_digest($force = false) {
