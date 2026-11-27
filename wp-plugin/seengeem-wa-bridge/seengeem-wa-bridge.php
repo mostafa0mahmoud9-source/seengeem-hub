@@ -2,13 +2,13 @@
 /**
  * Plugin Name: SeenGeem WhatsApp Bridge
  * Description: جسر واتساب لمساعد سين جيم: رقمان (طلاب وأولياء أمور / مدرسين ومتابعة)، Cloud API رسمي + بوابة QR احتياطية، طابور رسائل، تتبع التسليم، وواجهة API للتطبيقات.
- * Version: 2.6.3
+ * Version: 2.6.9
  * Author: SeenGeem
  * Text Domain: sgb
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('SGB_VER', '2.6.3');
+define('SGB_VER', '2.6.9');
 define('SGB_OPT', 'sgb_settings');
 
 /* ───────────── الإعدادات ───────────── */
@@ -231,6 +231,14 @@ function sgb_process_queue() {
 }
 
 /* ───────────── REST API ───────────── */
+// طلبات التطبيق/اللوحة ترسل JSON كـ text/plain (لتجنب CORS preflight): نصحح النوع قبل أي قراءة للبيانات
+add_filter('rest_pre_dispatch', function ($result, $server, $req) {
+    if ($req->get_method() === 'POST' && strpos((string) $req->get_route(), '/sgb/v1/') === 0) {
+        $q = $req->get_query_params();
+        if (!empty($q['_k']) && stripos((string) $req->get_header('content-type'), 'json') === false) { $req->set_header('content-type', 'application/json'); }
+    }
+    return $result;
+}, 1, 3);
 function sgb_auth($req) {
     if (current_user_can('manage_options')) { return true; }
     $s = sgb_settings();
@@ -259,7 +267,8 @@ add_action('rest_api_init', function () {
     register_rest_route($ns, '/ack', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
         global $wpdb;
         $t = $wpdb->prefix . 'sgb_outbox';
-        $b = $req->get_json_params();
+        $b = (array) $req->get_json_params();
+        if (empty($b['id'])) { return new WP_Error('bad_id', 'معرّف الرسالة مفقود', array('status' => 400)); }
         $ok = !empty($b['ok']);
         $wpdb->update($t, array(
             'status'  => $ok ? 'sent' : 'failed',
@@ -271,8 +280,11 @@ add_action('rest_api_init', function () {
         return array('ok' => true);
     }));
     register_rest_route($ns, '/incoming', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
-        $b = $req->get_json_params();
-        sgb_store_incoming(isset($b['channel']) ? $b['channel'] : 'students', isset($b['from']) ? $b['from'] : '', isset($b['body']) ? $b['body'] : '');
+        $b = (array) $req->get_json_params();
+        $ch = (isset($b['channel']) && $b['channel'] === 'staff') ? 'staff' : 'students';
+        // الموبايل احتياطي: لا نسجّل ردوده طالما الكمبيوتر شغال (يمنع التكرار)
+        if (isset($b['src']) && $b['src'] === 'mobile' && sgb_desktop_alive($ch)) { return array('ok' => true, 'ignored' => true); }
+        sgb_store_incoming($ch, isset($b['from']) ? $b['from'] : '', isset($b['body']) ? $b['body'] : '');
         return array('ok' => true);
     }));
     register_rest_route($ns, '/stats', array('methods' => 'GET', 'permission_callback' => 'sgb_auth', 'callback' => 'sgb_stats'));
@@ -362,7 +374,7 @@ function sgb_stats() {
     $s = sgb_settings();
     $conn = array();
     foreach ($s['channels'] as $k => $c) { $conn[$k] = array('label' => $c['label'], 'mode' => $c['mode'], 'cloud_ready' => (bool) ($c['phone_number_id'] && $c['token'])); }
-    return array('time' => time(), 'sent_today' => $today, 'by' => $by, 'recent' => $recent, 'incoming' => $inc, 'channels' => $conn, 'quiet_now' => sgb_in_quiet_hours(), 'version' => SGB_VER, 'gw' => get_option('sgb_gw', array()), 'paused' => sgb_paused_info(), 'qr_cap' => array('students' => sgb_qr_cap('students'), 'staff' => sgb_qr_cap('staff')));
+    return array('time' => time(), 'sent_today' => $today, 'by' => $by, 'recent' => $recent, 'incoming' => $inc, 'channels' => $conn, 'quiet_now' => sgb_in_quiet_hours(), 'version' => SGB_VER, 'gw' => get_option('sgb_gw', array()), 'gw_m' => get_option('sgb_gw_m', array()), 'paused' => sgb_paused_info(), 'qr_cap' => array('students' => sgb_qr_cap('students'), 'staff' => sgb_qr_cap('staff')));
 }
 
 /* ───────────── صفحة الإعدادات ───────────── */
