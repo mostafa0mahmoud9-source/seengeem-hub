@@ -170,6 +170,7 @@ function sgb_rule_label($k) {
         'incomplete' => 'درس لم يكتمل', 'quiz_due' => 'امتحان لم يُحل', 'low_score' => 'دعم بعد نتيجة ضعيفة', 'parent_followup' => 'متابعة ولي الأمر', 'weekly' => 'تقرير أسبوعي',
         'shoot_24' => 'تذكير تصوير 24س', 'shoot_2' => 'تذكير تصوير ساعتين', 'teacher_late' => 'تأخير تصوير', 'motivation' => 'تشجيع', 'manual' => 'يدوي');
     if (!isset($m[$k]) && function_exists('sgb_jr_labels')) { $jl = sgb_jr_labels(); if (isset($jl[$k])) { return $jl[$k]; } }
+    if (!isset($m[$k]) && function_exists('sgb_eng_labels')) { $el = sgb_eng_labels(); if (isset($el[$k])) { return $el[$k]; } }
     return isset($m[$k]) ? $m[$k] : $k;
 }
 function sgb_send_digest($force = false) {
