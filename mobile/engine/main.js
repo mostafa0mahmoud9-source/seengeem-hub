@@ -49,7 +49,7 @@ async function api(p, opt) {
 }
 function report(ch) {
   if (!cfg.site || !cfg.key || !S[ch]) return;
-  api('gw-status', { method: 'POST', body: JSON.stringify({ src: 'mobile', channel: ch, state: S[ch].state, phone: S[ch].phone || '' }) }).catch(() => {});
+  api('gw-status', { method: 'POST', body: JSON.stringify({ src: 'mobile', channel: ch, state: S[ch].state, phone: S[ch].phone || '', error: S[ch].error || '' }) }).catch(() => {});
 }
 
 const PHASES = [
@@ -140,11 +140,25 @@ async function startChannel(ch) {
 function restartLater(ch, gen, ms) { setTimeout(async () => { if (!RT[ch] || RT[ch].gen !== gen) return; await stopChannel(ch); if (cfg.channels[ch] !== false) startChannel(ch); }, ms || 20000); }
 async function stopChannel(ch) { const r = RT[ch]; if (r) { r.gen++; const c = r.client; r.client = null; if (c) { try { c.end(undefined); } catch (e) { /* ignore */ } } } }
 
+const ACKQ = [];
+async function ackSent(id, wa) {
+  for (let i = 0; i < 4; i++) {
+    try { await api('ack', { method: 'POST', body: JSON.stringify({ id, ok: true, wa_id: wa }) }); return; } catch (e) { await sleep(2000 * (i + 1)); }
+  }
+  ACKQ.push({ id, wa });
+}
+async function flushAcks() {
+  while (ACKQ.length) {
+    const a = ACKQ[0];
+    try { await api('ack', { method: 'POST', body: JSON.stringify({ id: a.id, ok: true, wa_id: a.wa }) }); ACKQ.shift(); } catch (e) { return; }
+  }
+}
 async function loop(ch, gen) {
   let sentRun = 0, fails = 0;
   while (RT[ch] && RT[ch].gen === gen && RT[ch].client && S[ch] && S[ch].state === 'ready') {
     try {
       if (cfg.site && cfg.key) {
+        await flushAcks();
         const items = await api('pull?channel=' + ch + '&src=mobile');
         for (const it of items) {
           if (!RT[ch] || RT[ch].gen !== gen || !RT[ch].client) return;
@@ -154,8 +168,8 @@ async function loop(ch, gen) {
             if (!hit || !hit.exists) throw new Error('الرقم غير مسجل على واتساب');
             try { await sock.presenceSubscribe(hit.jid); await sock.sendPresenceUpdate('composing', hit.jid); await sleep(rnd(1500, 4000)); await sock.sendPresenceUpdate('paused', hit.jid); } catch (e) { /* optional */ }
             const msg = await sock.sendMessage(hit.jid, { text: it.body });
-            await api('ack', { method: 'POST', body: JSON.stringify({ id: it.id, ok: true, wa_id: msg && msg.key && msg.key.id }) });
             sentRun++; fails = 0;
+            await ackSent(it.id, msg && msg.key && msg.key.id);
           } catch (e) {
             const m = String(e && e.message || e); if (m.indexOf('غير مسجل') < 0) fails++;
             await api('ack', { method: 'POST', body: JSON.stringify({ id: it.id, ok: false, error: m.slice(0, 200) }) }).catch(() => {});

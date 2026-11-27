@@ -22,17 +22,18 @@ function sgb_eng_defaults() {
         'support_on' => 0, 'support_hour' => 16, 'support_days' => array(0, 2, 4),
         'tips_on' => 0, 'tips_hour' => 18, 'tips_days' => array(0, 1, 2, 3, 4, 5, 6),
         'bday_on' => 0, 'bday_hour' => 10,
+        'teach_on' => 1, 'teach_hour' => 12, 'teach_days' => array(0, 3),
     );
 }
 function sgb_eng_cfg() { return array_replace(sgb_eng_defaults(), (array) get_option('sgb_eng', array())); }
 function sgb_eng_save_cfg($b) {
     $c = sgb_eng_cfg();
-    foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on') as $k) { if (isset($b[$k])) { $c[$k] = $b[$k] ? 1 : 0; } }
-    foreach (array('report_hour' => array(0, 23), 'occ_hour' => array(6, 20), 'weekend_hour' => array(6, 20), 'support_hour' => array(6, 20), 'tips_hour' => array(6, 20), 'bday_hour' => array(6, 20)) as $k => $r) {
+    foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on', 'teach_on') as $k) { if (isset($b[$k])) { $c[$k] = $b[$k] ? 1 : 0; } }
+    foreach (array('report_hour' => array(0, 23), 'occ_hour' => array(6, 20), 'weekend_hour' => array(6, 20), 'support_hour' => array(6, 20), 'tips_hour' => array(6, 20), 'bday_hour' => array(6, 20), 'teach_hour' => array(6, 20)) as $k => $r) {
         if (isset($b[$k])) { $c[$k] = max($r[0], min($r[1], (int) $b[$k])); }
     }
     if (isset($b['report_phone'])) { $p = sgb_phone($b['report_phone']); if ($p) { $c['report_phone'] = $p; } }
-    foreach (array('weekend_days', 'support_days', 'tips_days') as $k) {
+    foreach (array('weekend_days', 'support_days', 'tips_days', 'teach_days') as $k) {
         if (isset($b[$k])) { $c[$k] = array_values(array_unique(array_filter(array_map('intval', (array) $b[$k]), function ($d) { return $d >= 0 && $d <= 6; }))); }
     }
     if (isset($b['occ_aud'])) { $c['occ_aud'] = array_values(array_intersect((array) $b['occ_aud'], array('students', 'parents', 'teachers', 'employees'))); }
@@ -41,7 +42,7 @@ function sgb_eng_save_cfg($b) {
 }
 function sgb_eng_labels() {
     return array('eng_manual' => 'جماعية: رسالة يدوية', 'eng_occ' => 'تلقائي: تهنئة مناسبة', 'eng_weekend' => 'تلقائي: عطلة الأسبوع', 'eng_support' => 'تلقائي: دعم نفسي للطلاب',
-        'eng_tips' => 'تلقائي: نصيحة لولي الأمر', 'eng_bday_s' => 'تلقائي: عيد ميلاد طالب', 'eng_bday_p' => 'تلقائي: عيد ميلاد ولي أمر', 'eng_report' => 'تقرير المدير اليومي');
+        'eng_tips' => 'تلقائي: نصيحة لولي الأمر', 'eng_teach' => 'تلقائي: حث المدرسين على التصوير', 'eng_bday_s' => 'تلقائي: عيد ميلاد طالب', 'eng_bday_p' => 'تلقائي: عيد ميلاد ولي أمر', 'eng_report' => 'تقرير المدير اليومي');
 }
 
 /* ───────── التقويم: هجري / قبطي / مناسبات ───────── */
@@ -233,6 +234,8 @@ function sgb_eng_fill($t, $r, $extra = array()) {
     $child = $r['child'] !== '' ? $r['child'] : 'ابنكم';
     $t = sgb_render($t, array_merge(array('name' => $name, 'child' => $child, 'parent' => $r['aud'] === 'parents' ? $name : ''), $extra));
     $t = preg_replace('/\bيا\s+يا\s+/u', 'يا ', $t);
+    $t = preg_replace('/أستاذ\s+(?:مستر|ميستر|أستاذ|استاذ|الأستاذ|أ\.?)\s+/u', 'أستاذ ', $t);
+    $t = str_replace('أستاذ أستاذنا', 'أستاذنا', $t);
     return trim(preg_replace("/[ \t]{2,}/u", ' ', $t));
 }
 function sgb_eng_footer() { return ''; }   // لا يوجد سطر إيقاف: الإيقاف بيد المدير فقط
@@ -266,7 +269,7 @@ function sgb_eng_support_cat($uid) {
 function sgb_eng_recent_mass($phone) {
     global $wpdb;
     $t = $wpdb->prefix . 'sgb_outbox';
-    return (bool) $wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND rule_key IN ('eng_support','eng_weekend','eng_tips') AND created>%d LIMIT 1", $phone, time() - 20 * 3600));
+    return (bool) $wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND rule_key IN ('eng_support','eng_weekend','eng_tips','eng_teach') AND created>%d LIMIT 1", $phone, time() - 20 * 3600));
 }
 
 /* ───────── الدفعات (Jobs) ───────── */
@@ -314,7 +317,7 @@ function sgb_eng_send_one($j, $r) {
     }
     $cat = $j['cat'];
     if ($cat === 'support') { $cat = sgb_eng_support_cat($r['uid']); }
-    if (in_array($j['cat'], array('support', 'weekend', 'tips'), true) && sgb_eng_recent_mass($r['phone'])) { return new WP_Error('skip', 'تلقائية أخرى اليوم'); }
+    if (in_array($j['cat'], array('support', 'weekend', 'tips', 'teach'), true) && sgb_eng_recent_mass($r['phone'])) { return new WP_Error('skip', 'تلقائية أخرى اليوم'); }
     if ($j['cat'] === 'occ') {
         $all = sgb_eng_occasions();
         if (!isset($all[$j['occ']])) { return new WP_Error('skip', 'مناسبة'); }
@@ -369,6 +372,10 @@ function sgb_eng_auto() {
     if (!empty($c['tips_on']) && in_array($dow, (array) $c['tips_days'], true) && $ready('tips', (int) $c['tips_hour'])) {
         $mark('tips:' . $today);
         sgb_eng_create_job(array('kind' => 'lib', 'cat' => 'tips', 'label' => 'نصيحة أسرية لأولياء الأمور', 'recips' => sgb_eng_recipients(array('parents'))));
+    }
+    if (!empty($c['teach_on']) && in_array($dow, (array) $c['teach_days'], true) && $ready('teach', (int) $c['teach_hour'])) {
+        $mark('teach:' . $today);
+        sgb_eng_create_job(array('kind' => 'lib', 'cat' => 'teach', 'label' => 'حث المدرسين على التصوير ومواكبة المنهج', 'recips' => sgb_eng_recipients(array('teachers'))));
     }
     if (!empty($c['bday_on']) && $ready('bday', (int) $c['bday_hour'])) {
         $mark('bday:' . $today);
@@ -547,10 +554,10 @@ function sgb_eng_page() {
     }
     if (isset($_POST['sgb_eng_cfg']) && check_admin_referer('sgb_eng_cfg')) {
         $b = array();
-        foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on') as $k) { $b[$k] = !empty($_POST[$k]) ? 1 : 0; }
-        foreach (array('report_hour', 'occ_hour', 'weekend_hour', 'support_hour', 'tips_hour', 'bday_hour') as $k) { if (isset($_POST[$k])) { $b[$k] = (int) $_POST[$k]; } }
+        foreach (array('report_on', 'occ_on', 'weekend_on', 'support_on', 'tips_on', 'bday_on', 'teach_on') as $k) { $b[$k] = !empty($_POST[$k]) ? 1 : 0; }
+        foreach (array('report_hour', 'occ_hour', 'weekend_hour', 'support_hour', 'tips_hour', 'bday_hour', 'teach_hour') as $k) { if (isset($_POST[$k])) { $b[$k] = (int) $_POST[$k]; } }
         $b['report_phone'] = isset($_POST['report_phone']) ? sanitize_text_field(wp_unslash($_POST['report_phone'])) : '';
-        foreach (array('weekend_days', 'support_days', 'tips_days') as $k) { $b[$k] = isset($_POST[$k]) ? (array) $_POST[$k] : array(); }
+        foreach (array('weekend_days', 'support_days', 'tips_days', 'teach_days') as $k) { $b[$k] = isset($_POST[$k]) ? (array) $_POST[$k] : array(); }
         $b['occ_aud'] = isset($_POST['occ_aud']) ? array_map('sanitize_key', (array) $_POST['occ_aud']) : array();
         sgb_eng_save_cfg($b);
         $msg = 'تم حفظ الإعدادات ✅';
@@ -606,6 +613,7 @@ function sgb_eng_page() {
     echo '<tr><th>تهنئة المناسبات</th><td><label><input type="checkbox" name="occ_on" value="1"' . $ck('occ_on') . '> مفعّل</label> الساعة <input type="number" name="occ_hour" value="' . (int) $c['occ_hour'] . '" style="width:60px"> لـ: ';
     foreach ($audn as $k => $l) { echo '<label style="margin-left:8px"><input type="checkbox" name="occ_aud[]" value="' . $k . '"' . (in_array($k, (array) $c['occ_aud'], true) ? ' checked' : '') . '> ' . $l . '</label>'; }
     echo '</td></tr>';
+    echo '<tr><th>حث المدرسين على التصوير</th><td><label><input type="checkbox" name="teach_on" value="1"' . $ck('teach_on') . '> مفعّل</label> الساعة <input type="number" name="teach_hour" value="' . (int) $c['teach_hour'] . '" style="width:60px"> ' . $dayboxes('teach_days', $c['teach_days']) . '</td></tr>';
     echo '<tr><th>أعياد الميلاد</th><td><label><input type="checkbox" name="bday_on" value="1"' . $ck('bday_on') . '> مفعّل</label> الساعة <input type="number" name="bday_hour" value="' . (int) $c['bday_hour'] . '" style="width:60px"> (للطالب ولولي الأمر عند توفر التاريخ)</td></tr>';
     echo '<tr><th>عطلة الأسبوع للطلاب</th><td><label><input type="checkbox" name="weekend_on" value="1"' . $ck('weekend_on') . '> مفعّل</label> الساعة <input type="number" name="weekend_hour" value="' . (int) $c['weekend_hour'] . '" style="width:60px"> ' . $dayboxes('weekend_days', $c['weekend_days']) . '</td></tr>';
     echo '<tr><th>دعم نفسي للطلاب (حسب الانتظام)</th><td><label><input type="checkbox" name="support_on" value="1"' . $ck('support_on') . '> مفعّل</label> الساعة <input type="number" name="support_hour" value="' . (int) $c['support_hour'] . '" style="width:60px"> ' . $dayboxes('support_days', $c['support_days']) . '</td></tr>';
@@ -641,11 +649,11 @@ function sgb_eng_page() {
     echo '</tbody></table>';
 
     echo '<hr><h2>📚 عيّنات من المكتبة (تتغير مع كل تحديث للصفحة)</h2><table class="widefat striped"><tbody>';
-    $samp = array('weekend' => 'عطلة الأسبوع', 'support_active' => 'دعم: منتظم', 'support_mid' => 'دعم: متأخر', 'support_away' => 'دعم: غائب', 'tips' => 'نصيحة لولي الأمر', 'bday_s' => 'ميلاد طالب');
+    $samp = array('teach' => 'حث المدرسين', 'weekend' => 'عطلة الأسبوع', 'support_active' => 'دعم: منتظم', 'support_mid' => 'دعم: متأخر', 'support_away' => 'دعم: غائب', 'tips' => 'نصيحة لولي الأمر', 'bday_s' => 'ميلاد طالب');
     $tot = 0;
     foreach ($samp as $k => $l) {
         $L = sgb_lib($k); $n = count($L['open']) * count($L['body']) * count($L['close']); $tot += $n;
-        $r = array('name' => 'محمد', 'child' => 'محمد', 'aud' => $k === 'tips' ? 'parents' : 'students');
+        $r = array('name' => 'محمد', 'child' => 'محمد', 'aud' => $k === 'tips' ? 'parents' : ($k === 'teach' ? 'teachers' : 'students'));
         $t = sgb_eng_fill($L['open'][array_rand($L['open'])] . "\n" . $L['body'][array_rand($L['body'])] . "\n" . $L['close'][array_rand($L['close'])], $r);
         echo '<tr><td style="width:150px"><b>' . esc_html($l) . '</b><br><small>' . number_format_i18n($n) . ' تركيبة</small></td><td style="white-space:pre-wrap">' . esc_html($t) . '</td></tr>';
     }

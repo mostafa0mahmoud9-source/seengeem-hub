@@ -2,13 +2,13 @@
 /**
  * Plugin Name: SeenGeem WhatsApp Bridge
  * Description: جسر واتساب لمساعد سين جيم: رقمان (طلاب وأولياء أمور / مدرسين ومتابعة)، Cloud API رسمي + بوابة QR احتياطية، طابور رسائل، تتبع التسليم، وواجهة API للتطبيقات.
- * Version: 2.8.2
+ * Version: 2.8.3
  * Author: SeenGeem
  * Text Domain: sgb
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('SGB_VER', '2.8.2');
+define('SGB_VER', '2.8.3');
 define('SGB_OPT', 'sgb_settings');
 
 /* ───────────── الإعدادات ───────────── */
@@ -137,6 +137,19 @@ function sgb_enqueue($channel, $phone, $body, $args = array()) {
     if (!$p) { return new WP_Error('bad_phone', 'رقم غير صالح'); }
     if (sgb_is_optout($p)) { return new WP_Error('optout', 'العميل طلب إيقاف الرسائل'); }
     $t = $wpdb->prefix . 'sgb_outbox';
+    // حماية من التكرار (2.8.3): ما لم تكن الرسالة يدوية/تقرير/تجربة
+    $rk = isset($args['rule']) ? sanitize_key($args['rule']) : '';
+    $exempt = array('manual', 'eng_manual', 'eng_report', 'manager_digest', 'mgr_daily', 'mgr_followup', 'test');
+    if ($rk !== '' && !in_array($rk, $exempt, true) && empty($args['allow_repeat'])) {
+        $since = time() - 20 * 3600;
+        // 1) نفس النوع لنفس الرقم خلال 20 ساعة
+        if ($wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND rule_key=%s AND created>%d AND status<>'failed' AND status<>'cancelled' LIMIT 1", $p, $rk, $since))) { return new WP_Error('duplicate', 'نفس النوع أُرسل لهذا الرقم اليوم'); }
+        // 2) سقف يومي للرسائل الآلية لكل رقم (3 رسائل / 24 ساعة) إلا العاجلة
+        if ((int) (isset($args['priority']) ? $args['priority'] : 0) < 5 && (int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE to_phone=%s AND created>%d AND rule_key IS NOT NULL AND rule_key NOT IN ('manual','eng_manual') AND status NOT IN ('failed','cancelled')", $p, time() - 24 * 3600)) >= 3) { return new WP_Error('duplicate', 'تجاوز السقف اليومي للرقم'); }
+    }
+    // 3) نفس النص تمامًا لنفس الرقم خلال 3 أيام
+    $bodyc = wp_kses_post_deep_text($body);
+    if ($bodyc !== '' && empty($args['allow_repeat']) && $wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND body=%s AND created>%d AND status NOT IN ('failed','cancelled') LIMIT 1", $p, $bodyc, time() - 3 * 86400))) { return new WP_Error('duplicate', 'نفس النص أُرسل لهذا الرقم قريبًا'); }
     $dk = isset($args['dedupe']) ? substr((string) $args['dedupe'], 0, 120) : null;
     if ($dk) {
         $hrs = isset($args['dedupe_hours']) ? max(1, (int) $args['dedupe_hours']) : 72;
@@ -270,6 +283,9 @@ add_action('rest_api_init', function () {
         $b = (array) $req->get_json_params();
         if (empty($b['id'])) { return new WP_Error('bad_id', 'معرّف الرسالة مفقود', array('status' => 400)); }
         $ok = !empty($b['ok']);
+        $cur = $wpdb->get_var($wpdb->prepare("SELECT status FROM $t WHERE id=%d", (int) $b['id']));
+        if (!$ok && in_array($cur, array('sent', 'delivered', 'read'), true)) { return array('ok' => true, 'ignored' => true); }   // لا نُنزل رسالة مُرسلة إلى «فشلت»
+        if ($ok && in_array($cur, array('sent', 'delivered', 'read'), true)) { return array('ok' => true, 'ignored' => true); }
         $wpdb->update($t, array(
             'status'  => $ok ? 'sent' : 'failed',
             'sent_at' => $ok ? time() : null,
@@ -287,10 +303,33 @@ add_action('rest_api_init', function () {
         sgb_store_incoming($ch, isset($b['from']) ? $b['from'] : '', isset($b['body']) ? $b['body'] : '');
         return array('ok' => true);
     }));
+    register_rest_route($ns, '/outbox', array('methods' => 'GET', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
+        global $wpdb;
+        $t = $wpdb->prefix . 'sgb_outbox';
+        $grp = array('wait' => "'queued','sending','qr_pending'", 'sent' => "'sent'", 'ok' => "'delivered','read'", 'bad' => "'failed'", 'skip' => "'cancelled'");
+        $f = (string) $req->get_param('f');
+        $w = array('1=1'); $a = array();
+        if (isset($grp[$f])) { $w[] = 'status IN (' . $grp[$f] . ')'; }
+        elseif ($f === 'done') { $w[] = "status IN ('sent','delivered','read')"; }
+        $q = trim((string) $req->get_param('q'));
+        if ($q !== '') { $w[] = '(to_phone LIKE %s OR body LIKE %s)'; $a[] = '%' . $wpdb->esc_like($q) . '%'; $a[] = '%' . $wpdb->esc_like($q) . '%'; }
+        $rk = sanitize_key((string) $req->get_param('rule'));
+        if ($rk !== '') { $w[] = 'rule_key=%s'; $a[] = $rk; }
+        $before = (int) $req->get_param('before');
+        if ($before > 0) { $w[] = 'id<%d'; $a[] = $before; }
+        $lim = max(10, min(100, (int) $req->get_param('limit') ?: 40));
+        $sql = "SELECT id,channel,to_phone,body,rule_key,status,error,created,sent_at FROM $t WHERE " . implode(' AND ', $w) . " ORDER BY id DESC LIMIT " . ($lim + 1);
+        $rows = (array) $wpdb->get_results($a ? $wpdb->prepare($sql, $a) : $sql, ARRAY_A);
+        $more = count($rows) > $lim;
+        if ($more) { array_pop($rows); }
+        return array('rows' => $rows, 'more' => $more, 'time' => time());
+    }));
     register_rest_route($ns, '/stats', array('methods' => 'GET', 'permission_callback' => 'sgb_auth', 'callback' => 'sgb_stats'));
     register_rest_route($ns, '/retry', array('methods' => 'POST', 'permission_callback' => 'sgb_auth', 'callback' => function ($req) {
         global $wpdb;
         $t = $wpdb->prefix . 'sgb_outbox';
+        // لا نعيد إرسال رسالة سبق وصول نفس نصها لنفس الرقم
+        $wpdb->query("UPDATE $t f SET f.status='cancelled', f.error='مكررة (أُرسلت قبل كده)' WHERE f.status='failed' AND EXISTS (SELECT 1 FROM (SELECT to_phone, body FROM $t WHERE status IN ('sent','delivered','read')) s WHERE s.to_phone=f.to_phone AND s.body=f.body)");
         $wpdb->query("UPDATE $t SET status='queued', attempts=0, next_try=0 WHERE status='failed'");
         return array('ok' => true);
     }));

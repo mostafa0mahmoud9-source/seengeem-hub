@@ -183,10 +183,25 @@ async function stopChannel(ch, keepState) {
   if (!keepState && S[ch]) { /* الحالة تبقى حتى إعادة التشغيل */ }
 }
 
+/** تأكيد الإرسال للموقع مع إعادة المحاولة، وإن فشل نحفظه ونعيده لاحقًا (يمنع إرسال الرسالة مرتين). */
+const ACKQ = [];
+async function ackSent(id, wa) {
+  for (let i = 0; i < 4; i++) {
+    try { await api('ack', { method: 'POST', body: JSON.stringify({ id, ok: true, wa_id: wa }) }); return; } catch (e) { await sleep(2000 * (i + 1)); }
+  }
+  ACKQ.push({ id, wa });
+}
+async function flushAcks() {
+  while (ACKQ.length) {
+    const a = ACKQ[0];
+    try { await api('ack', { method: 'POST', body: JSON.stringify({ id: a.id, ok: true, wa_id: a.wa }) }); ACKQ.shift(); } catch (e) { return; }
+  }
+}
 async function loop(ch, gen) {
   let sentRun = 0, fails = 0;
   while (RT[ch] && RT[ch].gen === gen && RT[ch].client && S[ch] && S[ch].state === 'ready') {
     try {
+      await flushAcks();
       const items = await api('pull?channel=' + ch + '&inst=' + encodeURIComponent(cfg.inst || ''));
       for (const it of items) {
         if (!RT[ch] || RT[ch].gen !== gen || !RT[ch].client) return;
@@ -201,8 +216,8 @@ async function loop(ch, gen) {
           // محاكاة بشرية: «يكتب...» لمدة قصيرة قبل الإرسال
           try { await sock.presenceSubscribe(jid); await sock.sendPresenceUpdate('composing', jid); await sleep(rnd(1500, 4000)); await sock.sendPresenceUpdate('paused', jid); } catch (e) { /* ليست أساسية */ }
           const msg = await sock.sendMessage(jid, { text: it.body });
-          await api('ack', { method: 'POST', body: JSON.stringify({ id: it.id, ok: true, wa_id: msg && msg.key && msg.key.id }) });
           sentRun++; fails = 0;
+          await ackSent(it.id, msg && msg.key && msg.key.id);   // الإرسال تم فعلًا: أي فشل في التأكيد لا يجعل الرسالة «فاشلة»
         } catch (e) {
           const m = String(e && e.message || e);
           if (m.indexOf('غير مسجل') < 0) fails++;     // رقم غير موجود ليس مؤشر مشكلة في الخط

@@ -64,7 +64,7 @@ function sgb_pull($req) {
         if (sgb_desktop_alive($ch)) { return array(); }
     }
     // رسائل علقت في حالة «جاري الإرسال» أكثر من 10 دقائق تعود للطابور
-    $wpdb->query($wpdb->prepare("UPDATE $t SET status='qr_pending' WHERE status='sending' AND channel=%s AND next_try<%d", $ch, time() - 600));
+    $wpdb->query($wpdb->prepare("UPDATE $t SET status='qr_pending' WHERE status='sending' AND channel=%s AND next_try<%d", $ch, time() - 2700));   // 45 دقيقة (الدفعة قد تطول بسبب فواصل الحماية)
     $midnight = (new DateTime('today', wp_timezone()))->getTimestamp();
     $done = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM $t WHERE channel=%s AND ((sent_at>=%d AND status IN ('sent','delivered','read')) OR status='sending')", $ch, $midnight));
@@ -75,6 +75,11 @@ function sgb_pull($req) {
     $out = array(); $n = 0;
     foreach ($rows as $r) {
         if ((int) $r->priority < 2) { if ($n >= $left) { continue; } $n++; }
+        // لا نرسل نصًا وصل لنفس الرقم من قبل
+        if ($wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND body=%s AND id<>%d AND status IN ('sent','delivered','read') AND sent_at>%d LIMIT 1", $r->to_phone, $r->body, $r->id, time() - 3 * 86400))) {
+            $wpdb->update($t, array('status' => 'cancelled', 'error' => 'مكررة (أُرسلت قبل كده)'), array('id' => $r->id));
+            continue;
+        }
         $wpdb->update($t, array('status' => 'sending', 'next_try' => time()), array('id' => $r->id));
         $out[] = array('id' => $r->id, 'to_phone' => $r->to_phone, 'body' => $r->body);
     }
@@ -115,7 +120,7 @@ add_action('rest_api_init', function () {
         $ch = (isset($b['channel']) && $b['channel'] === 'staff') ? 'staff' : 'students';
         if (isset($b['src']) && $b['src'] === 'mobile') { // حالة الموبايل منفصلة عن الكمبيوتر
             $gm = (array) get_option('sgb_gw_m', array());
-            $gm[$ch] = array('state' => sanitize_key(isset($b['state']) ? $b['state'] : ''), 'phone' => sanitize_text_field(isset($b['phone']) ? $b['phone'] : ''), 'ts' => time());
+            $gm[$ch] = array('state' => sanitize_key(isset($b['state']) ? $b['state'] : ''), 'phone' => sanitize_text_field(isset($b['phone']) ? $b['phone'] : ''), 'error' => sanitize_text_field(isset($b['error']) ? mb_substr((string) $b['error'], 0, 300) : ''), 'ts' => time());
             update_option('sgb_gw_m', $gm, false);
             return array('ok' => true);
         }
