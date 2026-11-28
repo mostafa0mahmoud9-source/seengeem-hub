@@ -2,13 +2,13 @@
 /**
  * Plugin Name: SeenGeem WhatsApp Bridge
  * Description: جسر واتساب لمساعد سين جيم: رقمان (طلاب وأولياء أمور / مدرسين ومتابعة)، Cloud API رسمي + بوابة QR احتياطية، طابور رسائل، تتبع التسليم، وواجهة API للتطبيقات.
- * Version: 2.9.7
+ * Version: 2.9.8
  * Author: SeenGeem
  * Text Domain: sgb
  */
 if (!defined('ABSPATH')) { exit; }
 
-define('SGB_VER', '2.9.7');
+define('SGB_VER', '2.9.8');
 define('SGB_OPT', 'sgb_settings');
 
 /* ───────────── الإعدادات ───────────── */
@@ -160,6 +160,7 @@ function sgb_enqueue($channel, $phone, $body, $args = array()) {
         if ($wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND created>%d AND rule_key IS NOT NULL AND rule_key NOT LIKE %s AND rule_key NOT IN ('manual','eng_manual','eng_report') AND status NOT IN ('failed','cancelled') LIMIT 1", $p, time() - 20 * 3600, 'eng\\_%'))) { return new WP_Error('duplicate', 'وصلته رسالة عمل اليوم'); }
         if ((int) $wpdb->get_var($wpdb->prepare("SELECT COUNT(*) FROM $t WHERE to_phone=%s AND created>%d AND rule_key IN ('eng_weekend','eng_support','eng_tips','eng_teach','eng_bdform_s','eng_bdform_p') AND status NOT IN ('failed','cancelled')", $p, time() - 7 * 86400)) >= 3) { return new WP_Error('duplicate', 'تجاوز السقف الأسبوعي للرسائل التفاعلية'); }
     }
+    if (function_exists('sgb_vary') && empty($args['no_vary'])) { $body = sgb_vary($body, $p, $rk); }
     // 3) نفس النص تمامًا لنفس الرقم خلال 3 أيام
     $bodyc = wp_kses_post_deep_text($body);
     if ($bodyc !== '' && empty($args['allow_repeat']) && $wpdb->get_var($wpdb->prepare("SELECT id FROM $t WHERE to_phone=%s AND body=%s AND created>%d AND status NOT IN ('failed','cancelled') LIMIT 1", $p, $bodyc, time() - 3 * 86400))) { return new WP_Error('duplicate', 'نفس النص أُرسل لهذا الرقم قريبًا'); }

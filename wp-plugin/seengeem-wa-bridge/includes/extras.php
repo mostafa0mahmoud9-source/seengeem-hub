@@ -225,6 +225,28 @@ add_action('rest_api_init', function () {
 });
 
 /* ───────── ملخص الإدارة الأسبوعي ───────── */
+/**
+ * تنويع النص (2.9.8): لا يُرسل نفس النص الحرفي للجميع. ثابت لكل (رقم + نوع رسالة) حتى لا يتغير بين المحاولات،
+ * ومختلف بين الأرقام: تحية افتتاحية متبدلة + خاتمة قصيرة محايدة (أو بدونها) + دعم صيغ {أ|ب} داخل نص القاعدة.
+ */
+function sgb_vary($body, $phone, $rk) {
+    $body = (string) $body;
+    if ($body === '' || $rk === '' || strpos($rk, 'eng_') === 0 || in_array($rk, array('manual', 'eng_manual', 'eng_report', 'manager_digest', 'mgr_daily', 'mgr_followup', 'test'), true)) { return $body; }
+    if (function_exists('sgb_eng_spin')) { $body = sgb_eng_spin($body); }
+    $h = abs(crc32($phone . '|' . $rk));
+    // 1) تحية افتتاحية متبدلة
+    $open = array('أهلًا', 'مرحبًا', 'أهلًا وسهلًا', 'السلام عليكم');
+    if (preg_match('/^(أهلاً|أهلًا|مرحباً|مرحبًا|اهلا|أهلا)(?=[\s،,!.])/u', $body, $m)) {
+        $body = preg_replace('/^' . preg_quote($m[1], '/') . '/u', $open[$h % count($open)], $body, 1);
+    }
+    // 2) خاتمة قصيرة محايدة (أو لا شيء) حسب الرقم
+    if (mb_strlen($body) < 700 && mb_strpos($body, 'فريق سين جيم') === false) {
+        $close = array('', 'شكرًا 🌷', 'مع تحياتنا — فريق سين جيم', '', 'بالتوفيق 🌸', 'تحياتنا 🌷');
+        $c = $close[intdiv($h, 7) % count($close)];
+        if ($c !== '') { $body = rtrim($body) . "\n" . $c; }
+    }
+    return $body;
+}
 function sgb_rule_label($k) {
     $m = array('success' => 'تهنئة النجاح', 'renew_7' => 'تجديد قبل 7 أيام', 'renew_2' => 'تجديد قبل يومين', 'expired' => 'انتهاء الاشتراك', 'winback' => 'عرض العودة',
         'lead_welcome' => 'ترحيب بالمسجّل', 'lead_help' => 'مساعدة الاشتراك', 'lead_offer' => 'عرض أول اشتراك', 'inactive' => 'غياب', 'unwatched' => 'درس لم يُبدأ',
