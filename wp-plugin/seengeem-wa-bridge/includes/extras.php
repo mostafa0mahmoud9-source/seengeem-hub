@@ -44,12 +44,37 @@ function sgb_lease($ch, $inst, $host = '', $force = false) {
     }
     return array(false, isset($c['host']) ? (string) $c['host'] : '');
 }
-/** هل الكمبيوتر كان «جاهز» خلال آخر 10 دقائق؟ (الموبايل احتياطي ولا يتدخل قبل ذلك) */
+/** هل الكمبيوتر كان «جاهز» خلال آخر 4 دقائق؟ (لو لا، الموبايل يرسل بدله) */
 function sgb_desktop_alive($ch) {
     $g = (array) get_option('sgb_gw', array());
     $g = isset($g[$ch]) ? (array) $g[$ch] : array();
     $r = !empty($g['ready_ts']) ? (int) $g['ready_ts'] : ((isset($g['state']) && $g['state'] === 'ready' && !empty($g['ts'])) ? (int) $g['ts'] : 0);
-    return $r > 0 && (time() - $r) < 600;
+    return $r > 0 && (time() - $r) < 240;   // الكمبيوتر يبلّغ كل دقيقة؛ لو غاب 4 دقائق يتولى الموبايل الإرسال
+}
+/** رقم المدرسين/الموظفين الحاليين فقط، ومن لهم استثناء من الإرسال. (من حُذف من المنصة أو استُثني لا تصله أي رسالة آلية) */
+function sgb_staff_map() {
+    static $m = null;
+    if ($m !== null) { return $m; }
+    $m = array('ok' => array(), 'excl' => array());
+    if (!function_exists('sgb_eng_roles') || !function_exists('sgb_eng_user_phone')) { $m = false; return $m; }
+    $X = (array) get_option('sgb_tm_excl', array());
+    foreach (array('teachers', 'employees') as $a) {
+        foreach (get_users(array('role__in' => sgb_eng_roles($a), 'fields' => 'all', 'number' => 3000)) as $u) {
+            $ph = sgb_eng_user_phone($u->ID, $u);
+            if (!$ph) { continue; }
+            if (!empty($X[$u->ID])) { $m['excl'][$ph] = 1; } else { $m['ok'][$ph] = 1; }
+        }
+    }
+    return $m;
+}
+/** سبب منع رسالة آلية لرقم على قناة المدرسين، أو '' لو مسموح. */
+function sgb_staff_block_reason($phone, $rk) {
+    if (in_array((string) $rk, array('manual', 'eng_manual', 'eng_report', 'manager_digest', 'mgr_daily', 'mgr_followup', 'test'), true)) { return ''; }
+    $m = sgb_staff_map();
+    if (!$m) { return ''; }
+    if (isset($m['excl'][$phone])) { return 'مدرس/موظف مستثنى من الإرسال'; }
+    if (!isset($m['ok'][$phone])) { return 'ليس مدرسًا/موظفًا حاليًا في المنصة'; }
+    return '';
 }
 function sgb_pull($req) {
     global $wpdb;
@@ -65,6 +90,12 @@ function sgb_pull($req) {
     }
     // رسالة سُلِّمت للبرنامج ولم يصل تأكيدها خلال 45 دقيقة: لا نعيدها للطابور أبدًا (قد تكون أُرسلت فعلًا) — نعلّمها «فشلت/غير مؤكدة» منعًا للتكرار
     $wpdb->query($wpdb->prepare("UPDATE $t SET status='failed', error=%s WHERE status='sending' AND channel=%s AND next_try<%d", 'لم يصل تأكيد الإرسال (لم تُعَد تلقائيًا لمنع التكرار)', $ch, time() - 2700));
+    if ($ch === 'staff') {   // إلغاء أي رسالة منتظرة لمدرس محذوف أو مستثنى
+        foreach ($wpdb->get_results("SELECT id,to_phone,rule_key FROM $t WHERE status IN ('queued','qr_pending') AND channel='staff' LIMIT 300") as $q) {
+            $why = sgb_staff_block_reason($q->to_phone, $q->rule_key);
+            if ($why !== '') { $wpdb->update($t, array('status' => 'cancelled', 'error' => $why), array('id' => $q->id)); }
+        }
+    }
     $midnight = (new DateTime('today', sgb_tz()))->getTimestamp();
     $done = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM $t WHERE channel=%s AND ((sent_at>=%d AND status IN ('sent','delivered','read')) OR status='sending')", $ch, $midnight));
